@@ -7,6 +7,7 @@ import '../../../../core/constants/api_constants.dart';
 import '../../../widgets/master_layout.dart';
 import '../../../../core/app_theme_colors.dart';
 import '../../../widgets/ui_components/app_inputs.dart';
+import '../../../widgets/ui_components/organization_structure_selector.dart';
 
 class EventFormPage extends StatefulWidget {
   final Map<String, dynamic>? event;
@@ -30,6 +31,7 @@ class _EventFormPageState extends State<EventFormPage> {
 
   bool _isInPerson = true;
   int? _structureId;
+  bool _allowMultipleSubmissions = false;
 
   // --- MOTOR DE RECURRENCIA AVANZADO ---
   String _uiRecurrenceSelection = 'NONE';
@@ -87,7 +89,7 @@ class _EventFormPageState extends State<EventFormPage> {
               : [];
 
           final currentRecordTypes = List<int>.from(
-            widget.event?['assignedRecordTypeIds'] ?? [],
+            widget.event?['recordTypeIds'] ?? [],
           );
           _availableRecordTypes = (responses[1] is List)
               ? (responses[1] as List)
@@ -105,6 +107,8 @@ class _EventFormPageState extends State<EventFormPage> {
             _descCtrl.text = e['description'] ?? '';
             _isInPerson = e['isInPerson'] ?? true;
             _structureId = e['organizationStructureId'];
+            _allowMultipleSubmissions =
+                e['allowMultipleSubmissionsPerDay'] ?? false; // <--- AGREGAR
 
             _recurrenceType = e['recurrenceType'] ?? 'NONE';
             _recurrenceInterval = e['recurrenceInterval'] ?? 1;
@@ -113,9 +117,9 @@ class _EventFormPageState extends State<EventFormPage> {
             if (e['endDate'] != null) _endDate = DateTime.parse(e['endDate']);
             _maxOccurrences = e['maxOccurrences'];
 
-            if (_recurrenceType == 'NONE')
+            if (_recurrenceType == 'NONE') {
               _uiRecurrenceSelection = 'NONE';
-            else if (_recurrenceInterval == 1 &&
+            } else if (_recurrenceInterval == 1 &&
                 _endType == 'NEVER' &&
                 (_recurrenceType == 'DAILY' ||
                     _recurrenceType == 'MONTHLY' ||
@@ -135,10 +139,8 @@ class _EventFormPageState extends State<EventFormPage> {
               _selectedTime = TimeOfDay.fromDateTime(dt);
             }
 
-            if (e['assignedRecordTypeIds'] != null) {
-              _selectedRecordTypeIds.addAll(
-                List<int>.from(e['assignedRecordTypeIds']),
-              );
+            if (e['recordTypeIds'] != null) {
+              _selectedRecordTypeIds.addAll(List<int>.from(e['recordTypeIds']));
             }
           }
           _updateDateText();
@@ -307,7 +309,7 @@ class _EventFormPageState extends State<EventFormPage> {
                             SizedBox(
                               width: 120,
                               child: DropdownButtonFormField<String>(
-                                value: tempType,
+                                initialValue: tempType,
                                 decoration: InputDecoration(
                                   isDense: true,
                                   filled: true,
@@ -384,15 +386,15 @@ class _EventFormPageState extends State<EventFormPage> {
                             runSpacing: 8,
                             children: _weekDaysMap.map((day) {
                               final isSelected =
-                                  (tempBitmask & day['value'] as int) != 0;
+                                  tempBitmask & day['value'] != 0;
                               return InkWell(
                                 onTap: () {
                                   setStateModal(() {
-                                    if ((tempBitmask & day['value'] as int) !=
-                                        0)
+                                    if (tempBitmask & day['value'] != 0) {
                                       tempBitmask &= ~(day['value'] as int);
-                                    else
+                                    } else {
                                       tempBitmask |= (day['value'] as int);
+                                    }
                                   });
                                 },
                                 child: Container(
@@ -649,28 +651,34 @@ class _EventFormPageState extends State<EventFormPage> {
   String _getCustomSummaryText() {
     if (_recurrenceType == 'NONE') return "";
     String freq = "";
-    if (_recurrenceType == 'DAILY')
+    if (_recurrenceType == 'DAILY') {
       freq = _recurrenceInterval == 1
           ? "Todos los días"
           : "Cada $_recurrenceInterval días";
-    if (_recurrenceType == 'WEEKLY')
+    }
+    if (_recurrenceType == 'WEEKLY') {
       freq = _recurrenceInterval == 1
           ? "Semanalmente"
           : "Cada $_recurrenceInterval semanas";
-    if (_recurrenceType == 'MONTHLY')
+    }
+    if (_recurrenceType == 'MONTHLY') {
       freq = _recurrenceInterval == 1
           ? "Mensualmente"
           : "Cada $_recurrenceInterval meses";
-    if (_recurrenceType == 'ANNUALLY')
+    }
+    if (_recurrenceType == 'ANNUALLY') {
       freq = _recurrenceInterval == 1
           ? "Anualmente"
           : "Cada $_recurrenceInterval años";
+    }
 
     String endStr = "";
-    if (_endType == 'UNTIL_DATE' && _endDate != null)
+    if (_endType == 'UNTIL_DATE' && _endDate != null) {
       endStr = ", hasta el ${DateFormat('dd/MM/yyyy').format(_endDate!)}";
-    if (_endType == 'AFTER_OCCURRENCES')
+    }
+    if (_endType == 'AFTER_OCCURRENCES') {
       endStr = ", termina después de $_maxOccurrences repeticiones";
+    }
 
     return "$freq$endStr";
   }
@@ -706,6 +714,8 @@ class _EventFormPageState extends State<EventFormPage> {
       "date": finalDate.toIso8601String(),
       "description": _descCtrl.text.trim(),
       "isInPerson": _isInPerson,
+      "allowMultipleSubmissionsPerDay":
+          _allowMultipleSubmissions, // <--- AGREGAR
       "organizationStructureId": _structureId,
       "recordTypeIds": _selectedRecordTypeIds,
       "recurrenceType": _recurrenceType,
@@ -737,13 +747,14 @@ class _EventFormPageState extends State<EventFormPage> {
         );
       }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text("Error: $e", style: TextStyle(color: colors.text)),
             backgroundColor: colors.errorColor,
           ),
         );
+      }
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -784,27 +795,12 @@ class _EventFormPageState extends State<EventFormPage> {
                       validator: (v) => v!.isEmpty ? "Requerido" : null,
                     ),
 
-                    AppDropdown<int>(
+                    OrganizationStructureSelector(
                       value: _structureId,
+                      structures: _structures,
                       label: "Organizado por (Red/Grupo)",
-                      items: [
-                        DropdownMenuItem<int>(
-                          value: null,
-                          child: Text(
-                            "Evento Global (Iglesia)",
-                            style: TextStyle(
-                              fontStyle: FontStyle.italic,
-                              color: colors.text.withValues(alpha: 0.5),
-                            ),
-                          ),
-                        ),
-                        ..._structures.map(
-                          (s) => DropdownMenuItem<int>(
-                            value: s['id'],
-                            child: Text(s['name']),
-                          ),
-                        ),
-                      ],
+                      allowNull: true,
+                      nullLabel: "Evento Global (Iglesia)",
                       onChanged: (v) => setState(() => _structureId = v),
                     ),
 
@@ -813,6 +809,39 @@ class _EventFormPageState extends State<EventFormPage> {
                       label: "Descripción (Opcional)",
                       prefixIcon: Icons.description,
                       maxLines: 2,
+                    ),
+                    const SizedBox(height: 10),
+
+                    // 🔥 NUEVO CHECKBOX
+                    Theme(
+                      data: Theme.of(
+                        context,
+                      ).copyWith(unselectedWidgetColor: colors.inputBorder),
+                      child: CheckboxListTile(
+                        title: Text(
+                          "Permitir múltiples reportes diarios",
+                          style: TextStyle(
+                            color: colors.text,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                        subtitle: Text(
+                          "Útil para reportar 'Nuevos Creyentes' o eventos continuos varias veces el mismo día.",
+                          style: TextStyle(
+                            color: colors.text.withValues(alpha: 0.6),
+                            fontSize: 12,
+                          ),
+                        ),
+                        value: _allowMultipleSubmissions,
+                        activeColor: colors.iconBackground,
+                        checkColor: colors.iconColor,
+                        contentPadding: EdgeInsets.zero,
+                        controlAffinity: ListTileControlAffinity.leading,
+                        onChanged: (val) => setState(
+                          () => _allowMultipleSubmissions = val ?? false,
+                        ),
+                      ),
                     ),
 
                     const Divider(height: 30),
@@ -982,11 +1011,11 @@ class _EventFormPageState extends State<EventFormPage> {
                               ),
                             ),
                           )
-                        : Container(
-                            decoration: BoxDecoration(
-                              color: colors.inputBackground,
+                        : Material(
+                            color: colors.inputBackground,
+                            shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: colors.inputBorder),
+                              side: BorderSide(color: colors.inputBorder),
                             ),
                             child: Column(
                               children: _availableRecordTypes.map((type) {
@@ -1011,10 +1040,11 @@ class _EventFormPageState extends State<EventFormPage> {
                                     checkColor: colors.iconColor,
                                     onChanged: (val) {
                                       setState(() {
-                                        if (val == true)
+                                        if (val == true) {
                                           _selectedRecordTypeIds.add(id);
-                                        else
+                                        } else {
                                           _selectedRecordTypeIds.remove(id);
+                                        }
                                       });
                                     },
                                   ),

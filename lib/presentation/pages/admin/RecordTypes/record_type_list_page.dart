@@ -119,10 +119,11 @@ class _RecordTypeListPageState extends State<RecordTypeListPage> {
 
     setState(() => _isLoading = true);
     try {
-      if (isDeleted)
+      if (isDeleted) {
         await _repository.customPost(id, 'restore');
-      else
+      } else {
         await _repository.delete(id);
+      }
       await _loadData();
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
@@ -150,7 +151,7 @@ class _RecordTypeListPageState extends State<RecordTypeListPage> {
         normalizedRole == SystemRoles.admin;
 
     return MasterLayout(
-      title: "Tipos de Reporte",
+      title: "Diseñador de Formularios",
       mode: PageMode.list,
       enableSearch: true,
       onSearch: (q) {
@@ -292,10 +293,12 @@ class _RecordTypeListPageState extends State<RecordTypeListPage> {
                                           ),
                                         ),
                                         onSelected: (val) {
-                                          if (val == 'edit')
+                                          if (val == 'edit') {
                                             _navigateToForm(item);
-                                          if (val == 'toggle')
+                                          }
+                                          if (val == 'toggle') {
                                             _toggleDeleteStatus(item);
+                                          }
                                         },
                                         itemBuilder: (ctx) => [
                                           if (isActive)

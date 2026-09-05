@@ -441,12 +441,15 @@ class _UserListPageState extends State<UserListPage> {
                                         ),
                                       ),
                                       onSelected: (val) {
-                                        if (val == 'edit')
+                                        if (val == 'edit') {
                                           _navigateToForm(item);
-                                        if (val == 'toggle_active')
+                                        }
+                                        if (val == 'toggle_active') {
                                           _toggleActive(item);
-                                        if (val == 'toggle_delete')
+                                        }
+                                        if (val == 'toggle_delete') {
                                           _toggleDeleteStatus(item);
+                                        }
                                       },
                                       itemBuilder: (ctx) => [
                                         if (!isDeleted)

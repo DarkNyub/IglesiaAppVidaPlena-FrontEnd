@@ -4,6 +4,7 @@ import '../../../../core/constants/api_constants.dart';
 import '../../../widgets/master_layout.dart';
 import '../../../../core/app_theme_colors.dart';
 import '../../../widgets/ui_components/app_inputs.dart';
+import '../../../widgets/ui_components/organization_structure_selector.dart';
 
 class OrganizationStructureFormPage extends StatefulWidget {
   final Map<String, dynamic>? existingStructure;
@@ -226,32 +227,22 @@ class _OrganizationStructureFormPageState
                       validator: (v) => v == null ? "Requerido" : null,
                     ),
 
-                    AppDropdown<int>(
-                      value: _selectedParentId,
-                      label: "Pertenece a (Padre)",
-                      items: [
-                        DropdownMenuItem<int>(
-                          value: null,
-                          child: Text(
-                            "(Sin Padre - Raíz)",
-                            style: TextStyle(
-                              fontStyle: FontStyle.italic,
-                              color: colors.text.withValues(alpha: 0.5),
-                            ),
-                          ),
+                    // REEMPLAZA EL AppDropdown DE "Pertenece a (Padre)" CON ESTO:
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SizedBox(height: 8),
+                        OrganizationStructureSelector(
+                          value: _selectedParentId,
+                          structures: _flatStructures,
+                          label: "Pertenece a (Padre)",
+                          allowNull: true,
+                          nullLabel: "(Sin Padre - Raíz)",
+                          onChanged: (val) =>
+                              setState(() => _selectedParentId = val),
                         ),
-                        ..._flatStructures.map(
-                          (p) => DropdownMenuItem<int>(
-                            value: p['id'],
-                            child: Text(
-                              p['name'],
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ),
+                        const SizedBox(height: 20),
                       ],
-                      onChanged: (val) =>
-                          setState(() => _selectedParentId = val),
                     ),
 
                     AppTextField(

@@ -36,6 +36,7 @@ class _SettingsPageState extends State<SettingsPage> {
   Color _customError = Colors.red;
   Color _customWarning = Colors.orange;
   Color _customInfo = Colors.blue;
+  int _firstDayOfWeek = 1; // 1 = Lunes (predeterminado), 7 = Domingo
 
   @override
   void initState() {
@@ -59,19 +60,24 @@ class _SettingsPageState extends State<SettingsPage> {
 
       final c = uiProvider.customColors;
       if (c != null) {
-        _customBg = Color(c['bg'] ?? _customBg.value);
-        _customText = Color(c['text'] ?? _customText.value);
-        _customCardBg = Color(c['cardBg'] ?? _customCardBg.value);
-        _customCardBorder = Color(c['cardBorder'] ?? _customCardBorder.value);
-        _customIcon = Color(c['icon'] ?? _customIcon.value);
-        _customIconBg = Color(c['iconBg'] ?? _customIconBg.value);
-        _customIconBorder = Color(c['iconBorder'] ?? _customIconBorder.value);
-        _customInputColor = Color(c['input'] ?? _customInputColor.value);
-        _customBtnBg = Color(c['btnBg'] ?? _customBtnBg.value);
-        _customSuccess = Color(c['success'] ?? _customSuccess.value);
-        _customError = Color(c['error'] ?? _customError.value);
-        _customWarning = Color(c['warning'] ?? _customWarning.value);
-        _customInfo = Color(c['info'] ?? _customInfo.value);
+        _firstDayOfWeek = c['firstDayOfWeek'] ?? 1;
+        _customBg = Color(c['bg'] ?? _customBg.toARGB32());
+        _customText = Color(c['text'] ?? _customText.toARGB32());
+        _customCardBg = Color(c['cardBg'] ?? _customCardBg.toARGB32());
+        _customCardBorder = Color(
+          c['cardBorder'] ?? _customCardBorder.toARGB32(),
+        );
+        _customIcon = Color(c['icon'] ?? _customIcon.toARGB32());
+        _customIconBg = Color(c['iconBg'] ?? _customIconBg.toARGB32());
+        _customIconBorder = Color(
+          c['iconBorder'] ?? _customIconBorder.toARGB32(),
+        );
+        _customInputColor = Color(c['input'] ?? _customInputColor.toARGB32());
+        _customBtnBg = Color(c['btnBg'] ?? _customBtnBg.toARGB32());
+        _customSuccess = Color(c['success'] ?? _customSuccess.toARGB32());
+        _customError = Color(c['error'] ?? _customError.toARGB32());
+        _customWarning = Color(c['warning'] ?? _customWarning.toARGB32());
+        _customInfo = Color(c['info'] ?? _customInfo.toARGB32());
       }
     });
   }
@@ -81,19 +87,19 @@ class _SettingsPageState extends State<SettingsPage> {
     if (_selectedThemeMode == 'dark') return AppThemeColors.dark();
 
     return AppThemeColors.custom({
-      "bg": _customBg.value,
-      "text": _customText.value,
-      "cardBg": _customCardBg.value,
-      "cardBorder": _customCardBorder.value,
-      "icon": _customIcon.value,
-      "iconBg": _customIconBg.value,
-      "iconBorder": _customIconBorder.value,
-      "input": _customInputColor.value,
-      "btnBg": _customBtnBg.value,
-      "success": _customSuccess.value,
-      "error": _customError.value,
-      "warning": _customWarning.value,
-      "info": _customInfo.value,
+      "bg": _customBg.toARGB32(),
+      "text": _customText.toARGB32(),
+      "cardBg": _customCardBg.toARGB32(),
+      "cardBorder": _customCardBorder.toARGB32(),
+      "icon": _customIcon.toARGB32(),
+      "iconBg": _customIconBg.toARGB32(),
+      "iconBorder": _customIconBorder.toARGB32(),
+      "input": _customInputColor.toARGB32(),
+      "btnBg": _customBtnBg.toARGB32(),
+      "success": _customSuccess.toARGB32(),
+      "error": _customError.toARGB32(),
+      "warning": _customWarning.toARGB32(),
+      "info": _customInfo.toARGB32(),
     });
   }
 
@@ -106,25 +112,27 @@ class _SettingsPageState extends State<SettingsPage> {
       final uiConfig = {
         "theme_mode": _selectedThemeMode,
         "size_level": _sizeLevel,
+        "first_day_of_week": _firstDayOfWeek,
       };
 
       Map<String, dynamic>? customColorsPayload;
 
       if (_selectedThemeMode == 'custom') {
         customColorsPayload = {
-          "bg": _customBg.value,
-          "text": _customText.value,
-          "cardBg": _customCardBg.value,
-          "cardBorder": _customCardBorder.value,
-          "icon": _customIcon.value,
-          "iconBg": _customIconBg.value,
-          "iconBorder": _customIconBorder.value,
-          "input": _customInputColor.value,
-          "btnBg": _customBtnBg.value,
-          "success": _customSuccess.value,
-          "error": _customError.value,
-          "warning": _customWarning.value,
-          "info": _customInfo.value,
+          "bg": _customBg.toARGB32(),
+          "text": _customText.toARGB32(),
+          "cardBg": _customCardBg.toARGB32(),
+          "cardBorder": _customCardBorder.toARGB32(),
+          "icon": _customIcon.toARGB32(),
+          "iconBg": _customIconBg.toARGB32(),
+          "iconBorder": _customIconBorder.toARGB32(),
+          "input": _customInputColor.toARGB32(),
+          "btnBg": _customBtnBg.toARGB32(),
+          "success": _customSuccess.toARGB32(),
+          "error": _customError.toARGB32(),
+          "warning": _customWarning.toARGB32(),
+          "info": _customInfo.toARGB32(),
+          "firstDayOfWeek": _firstDayOfWeek,
         };
         uiConfig["colors"] = customColorsPayload;
       }
@@ -412,6 +420,24 @@ class _SettingsPageState extends State<SettingsPage> {
             inactiveColor: colors.iconBackground.withValues(alpha: 0.2),
             onChanged: (v) => setState(() => _sizeLevel = v),
           ),
+          Text(
+            "Inicio de Semana para Reportes",
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: colors.text,
+            ),
+          ),
+          const SizedBox(height: 10),
+          SegmentedButton<int>(
+            segments: const [
+              ButtonSegment(value: 1, label: Text('Lunes a Domingo')),
+              ButtonSegment(value: 7, label: Text('Domingo a Sábado')),
+            ],
+            selected: {_firstDayOfWeek},
+            onSelectionChanged: (set) =>
+                setState(() => _firstDayOfWeek = set.first),
+          ),
 
           Divider(height: 40, color: colors.cardBorder),
           Text(
@@ -642,7 +668,7 @@ class _SettingsPageState extends State<SettingsPage> {
           scrollDirection: Axis.horizontal,
           child: Row(
             children: colorsList.map((c) {
-              final isSelected = current.value == c.value;
+              final isSelected = current.toARGB32() == c.toARGB32();
               return GestureDetector(
                 onTap: () => onSelect(c),
                 child: Container(

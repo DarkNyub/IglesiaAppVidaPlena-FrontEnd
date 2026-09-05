@@ -314,14 +314,18 @@ class _ReportListPageState extends State<ReportListPage> {
                                         ),
                                       ),
                                       onSelected: (val) {
-                                        if (val == 'export')
+                                        if (val == 'export') {
                                           _navigateToExporter(item);
-                                        if (val == 'view')
+                                        }
+                                        if (val == 'view') {
                                           _navigateToViewer(item);
-                                        if (val == 'edit')
+                                        }
+                                        if (val == 'edit') {
                                           _navigateToDesigner(item);
-                                        if (val == 'toggle')
+                                        }
+                                        if (val == 'toggle') {
                                           _toggleDeleteStatus(item);
+                                        }
                                       },
                                       itemBuilder: (ctx) => [
                                         if (isActive)

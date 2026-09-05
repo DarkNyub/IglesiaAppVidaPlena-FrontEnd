@@ -75,10 +75,12 @@ class GenericRepository {
       return error.toString().replaceAll("Exception: ", "").trim();
     }
 
-    if (e.contains("401"))
+    if (e.contains("401")) {
       return "Sesión expirada. Por favor, inicia sesión nuevamente.";
-    if (e.contains("403"))
+    }
+    if (e.contains("403")) {
       return "No tienes permisos para realizar esta acción.";
+    }
     if (e.contains("404")) return "Registro no encontrado.";
     if (e.contains("network") ||
         e.contains("socket") ||

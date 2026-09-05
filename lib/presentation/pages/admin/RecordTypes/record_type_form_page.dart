@@ -607,9 +607,10 @@ class _RecordTypeFormPageState extends State<RecordTypeFormPage> {
                                             .toList(),
                                         onChanged: (v) => setState(() {
                                           field['dataType'] = v;
-                                          if (v != 'MEMBER_SELECTION')
+                                          if (v != 'MEMBER_SELECTION') {
                                             field['memberSelectionLogic'] =
                                                 null;
+                                          }
                                         }),
                                       ),
                                     ),

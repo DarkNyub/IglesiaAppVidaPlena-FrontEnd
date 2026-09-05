@@ -77,7 +77,11 @@ class _RegistryFormState extends State<RegistryFormPage> {
 
     final int recordTypeId = _formStructure!['recordTypeId'];
     setState(() => _isLoading = true);
-
+    final List<dynamic> fields = _formStructure!['fields'] ?? [];
+    final List<String> fieldOrder = fields
+        .map((f) => f['name'].toString())
+        .toList();
+    _formData['_field_order'] = fieldOrder;
     try {
       final payload = {
         "eventId": widget.eventId,
@@ -201,10 +205,9 @@ class _RegistryFormState extends State<RegistryFormPage> {
                 children: [
                   Text(
                     _formStructure!['formName'] ?? 'Reporte de Evento',
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       color: colors.text,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
                   if (_formStructure!['formDescription'] != null)

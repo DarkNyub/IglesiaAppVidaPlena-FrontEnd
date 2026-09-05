@@ -162,13 +162,14 @@ class _SystemRoleListPageState extends State<SystemRoleListPage> {
       final payload = {"id": id, "name": name, "description": desc};
       await _repo.save(payload);
       _loadData();
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text("Rol guardado", style: TextStyle(color: colors.text)),
             backgroundColor: colors.successColor,
           ),
         );
+      }
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -250,7 +251,7 @@ class _SystemRoleListPageState extends State<SystemRoleListPage> {
         await _repo.delete(id);
       }
       await _loadData();
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -260,6 +261,7 @@ class _SystemRoleListPageState extends State<SystemRoleListPage> {
             backgroundColor: colors.successColor,
           ),
         );
+      }
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -406,8 +408,9 @@ class _SystemRoleListPageState extends State<SystemRoleListPage> {
                                       ),
                                       onSelected: (val) {
                                         if (val == 'edit') _showForm(item);
-                                        if (val == 'toggle')
+                                        if (val == 'toggle') {
                                           _toggleDeleteStatus(item);
+                                        }
                                       },
                                       itemBuilder: (ctx) => [
                                         if (!isDeleted)

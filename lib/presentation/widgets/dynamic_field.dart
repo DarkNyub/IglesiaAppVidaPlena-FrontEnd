@@ -24,6 +24,7 @@ class _DynamicFieldWidgetState extends State<DynamicFieldWidget> {
   late GenericRepository _memberRepo;
   Future<List<dynamic>>? _membersFuture;
   int? _selectedMemberId;
+  int _currentStep = 1;
 
   @override
   void initState() {
@@ -248,7 +249,7 @@ class _DynamicFieldWidgetState extends State<DynamicFieldWidget> {
     );
   }
 
-  // --- 4. NUMÉRICO MEJORADO ---
+  // --- 4. NUMÉRICO MEJORADO (TODO EN UNA FILA) ---
   Widget _buildEnhancedNumberField(
     String label,
     String key,
@@ -258,11 +259,18 @@ class _DynamicFieldWidgetState extends State<DynamicFieldWidget> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16.0),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // 1. EL INPUT TRADICIONAL (Toma el 45% del espacio)
           Expanded(
+            flex: 4,
             child: TextFormField(
               controller: _controller,
-              style: TextStyle(color: colors.text),
+              style: TextStyle(
+                color: colors.text,
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
               keyboardType: TextInputType.numberWithOptions(decimal: isDecimal),
               inputFormatters: [
                 isDecimal
@@ -279,25 +287,97 @@ class _DynamicFieldWidgetState extends State<DynamicFieldWidget> {
             ),
           ),
           const SizedBox(width: 8),
-          Container(
-            height: 55, // Alineado con el input
-            decoration: BoxDecoration(
-              color: colors.inputBackground,
-              border: Border.all(color: colors.inputBorder),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              children: [
-                IconButton(
-                  icon: Icon(Icons.remove, color: colors.iconBackground),
-                  onPressed: () => _modifyValue(-1, key, isDecimal),
-                ),
-                Container(width: 1, color: colors.inputBorder),
-                IconButton(
-                  icon: Icon(Icons.add, color: colors.iconBackground),
-                  onPressed: () => _modifyValue(1, key, isDecimal),
-                ),
-              ],
+
+          // 2. LA BARRA DE CONTROL [ - ] [ SELECTOR ] [ + ] (Toma el 55% del espacio)
+          Expanded(
+            flex: 5,
+            child: Container(
+              height: 56, // Altura estándar del input para que queden alineados
+              decoration: BoxDecoration(
+                color: colors.inputBackground,
+                border: Border.all(color: colors.inputBorder),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  // BOTÓN MENOS
+                  Expanded(
+                    flex: 1,
+                    child: InkWell(
+                      onTap: () => _modifyValue(-_currentStep, key, isDecimal),
+                      borderRadius: const BorderRadius.horizontal(
+                        left: Radius.circular(12),
+                      ),
+                      child: Center(
+                        child: Icon(
+                          Icons.remove,
+                          color: colors.iconBackground,
+                          size: 24,
+                        ),
+                      ),
+                    ),
+                  ),
+                  Container(width: 1, color: colors.inputBorder),
+
+                  // SELECTOR CENTRAL (Dropdown)
+                  Expanded(
+                    flex: 2,
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<int>(
+                        isExpanded: true,
+                        alignment: Alignment.center,
+                        dropdownColor: colors.cardBackground,
+                        value: _currentStep,
+                        icon: Icon(
+                          Icons.arrow_drop_down,
+                          color: colors.text.withValues(alpha: 0.5),
+                          size: 18,
+                        ),
+                        items: [1, 10, 100, 1000, 10000].map((step) {
+                          return DropdownMenuItem<int>(
+                            value: step,
+                            child: Center(
+                              child: Text(
+                                step.toString(),
+                                style: TextStyle(
+                                  color: colors.text,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                        onChanged: (val) {
+                          if (val != null) {
+                            setState(() => _currentStep = val);
+                          }
+                        },
+                      ),
+                    ),
+                  ),
+
+                  Container(width: 1, color: colors.inputBorder),
+
+                  // BOTÓN MÁS
+                  Expanded(
+                    flex: 1,
+                    child: InkWell(
+                      onTap: () => _modifyValue(_currentStep, key, isDecimal),
+                      borderRadius: const BorderRadius.horizontal(
+                        right: Radius.circular(12),
+                      ),
+                      child: Center(
+                        child: Icon(
+                          Icons.add,
+                          color: colors.iconBackground,
+                          size: 24,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
@@ -305,9 +385,11 @@ class _DynamicFieldWidgetState extends State<DynamicFieldWidget> {
     );
   }
 
-  void _modifyValue(int sign, String key, bool isDecimal) {
+  void _modifyValue(int amount, String key, bool isDecimal) {
     double current = double.tryParse(_controller.text) ?? 0;
-    double newVal = current + (sign * 1);
+    double newVal = current + amount;
+
+    // Evitamos números negativos en reportes (ofrendas, asistencias, etc)
     if (newVal < 0) newVal = 0;
 
     setState(() {
@@ -377,7 +459,7 @@ class _DynamicFieldWidgetState extends State<DynamicFieldWidget> {
           }
 
           return DropdownButtonFormField<int>(
-            value: _selectedMemberId,
+            initialValue: _selectedMemberId,
             dropdownColor: colors.cardBackground,
             style: TextStyle(color: colors.text),
             decoration: _getSharedDecoration(

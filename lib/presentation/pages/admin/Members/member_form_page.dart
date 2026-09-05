@@ -8,6 +8,7 @@ import '../../../../core/app_theme_colors.dart';
 import '../../../widgets/ui_components/app_inputs.dart';
 import '../../../widgets/master_layout.dart';
 import '../Users/user_form_page.dart';
+import '../../../widgets/ui_components/organization_structure_selector.dart';
 
 class MemberFormPage extends StatefulWidget {
   final Map<String, dynamic>? existingMember;
@@ -36,8 +37,8 @@ class _MemberFormPageState extends State<MemberFormPage> {
 
   List<dynamic> _structures = [];
   List<dynamic> _churchRoles = [];
-  List<Map<String, dynamic>> _assignedRoles = [];
-  List<Map<String, String>> _extraDataList = [];
+  final List<Map<String, dynamic>> _assignedRoles = [];
+  final List<Map<String, String>> _extraDataList = [];
 
   Map<String, dynamic>? _linkedUserObj;
   String? _createdBy;
@@ -200,17 +201,10 @@ class _MemberFormPageState extends State<MemberFormPage> {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              AppDropdown<int>(
+              OrganizationStructureSelector(
                 value: selectedStruct,
-                label: "Estructura",
-                items: _structures
-                    .map(
-                      (s) => DropdownMenuItem<int>(
-                        value: s['id'],
-                        child: Text(s['name']),
-                      ),
-                    )
-                    .toList(),
+                structures: _structures,
+                label: "Estructura Organizacional",
                 onChanged: (v) => setModalState(() => selectedStruct = v),
               ),
               AppDropdown<int>(
@@ -325,13 +319,14 @@ class _MemberFormPageState extends State<MemberFormPage> {
       final userFull = await GenericRepository(
         endpoint: ApiConstants.users,
       ).getById(userSimple['id']);
-      if (mounted)
+      if (mounted) {
         Navigator.push(
           context,
           MaterialPageRoute(
             builder: (_) => UserFormPage(existingUser: userFull),
           ),
         );
+      }
     } catch (e) {
       _showSnackbar("Error cargando usuario: $e", isError: true);
     }

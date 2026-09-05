@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/constants/api_constants.dart';
-import '../../../core/app_theme_colors.dart'; // <--- IMPORTAMOS LA MOCHILA
+import '../../../core/app_theme_colors.dart';
 import 'simplesPages/simple_catalog_page.dart';
 import 'Events/event_list_page.dart';
 import 'RecordTypes/record_type_list_page.dart';
@@ -11,6 +11,7 @@ import 'simplesPages/system_role_list_page.dart';
 import 'Members/member_list_page.dart';
 import '../../widgets/master_layout.dart';
 import 'Reports/report_list_page.dart';
+import '../RegistryEvents/registry_event_list_page.dart'; // <--- NAVEGACIÓN A BITÁCORA
 
 class AdminDashboardPage extends StatelessWidget {
   const AdminDashboardPage({super.key});
@@ -22,7 +23,7 @@ class AdminDashboardPage extends StatelessWidget {
       child: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          // SECCIÓN 1: SEGURIDAD (Usuarios)
+          // SECCIÓN 1: SEGURIDAD
           const _SectionHeader(title: "Seguridad y Accesos"),
 
           _DashboardListTile(
@@ -127,7 +128,18 @@ class AdminDashboardPage extends StatelessWidget {
           const SizedBox(height: 15),
 
           // SECCIÓN 5: INTELIGENCIA Y REPORTES
-          const _SectionHeader(title: "Inteligencia y Reportes"),
+          const _SectionHeader(title: "Inteligencia y Bitácora"),
+
+          // 🔥 ACCESO RÁPIDO A LA BITÁCORA DE REPORTES LLENADOS
+          _DashboardListTile(
+            title: "Historial de Reportes (Bitácora)",
+            subtitle: "Consulta de formularios diligenciados y anulaciones",
+            icon: Icons.history_edu_outlined,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const RegistryEventListPage()),
+            ),
+          ),
 
           _DashboardListTile(
             title: "Constructor de Reportes",
@@ -138,6 +150,7 @@ class AdminDashboardPage extends StatelessWidget {
               MaterialPageRoute(builder: (_) => const ReportListPage()),
             ),
           ),
+          const SizedBox(height: 30),
         ],
       ),
     );
@@ -162,15 +175,12 @@ class AdminDashboardPage extends StatelessWidget {
   }
 }
 
-// --- WIDGETS PRIVADOS 100% LIMPIOS ---
-
 class _SectionHeader extends StatelessWidget {
   final String title;
   const _SectionHeader({required this.title});
 
   @override
   Widget build(BuildContext context) {
-    // 1. Tomamos los colores directamente de la mochila
     final colors = Theme.of(context).extension<AppThemeColors>()!;
 
     return Padding(
@@ -178,7 +188,7 @@ class _SectionHeader extends StatelessWidget {
       child: Text(
         title.toUpperCase(),
         style: TextStyle(
-          color: colors.text.withValues(alpha: 0.6), // Asignación directa
+          color: colors.text.withValues(alpha: 0.6),
           fontWeight: FontWeight.bold,
           letterSpacing: 1.2,
         ),
@@ -202,7 +212,6 @@ class _DashboardListTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 1. Tomamos los colores directamente de la mochila
     final colors = Theme.of(context).extension<AppThemeColors>()!;
 
     return Padding(
@@ -213,34 +222,22 @@ class _DashboardListTile extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
           decoration: BoxDecoration(
-            color: colors.cardBackground, // Asignación directa
+            color: colors.cardBackground,
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: colors.cardBorder, // Asignación directa
-              width: 1.5,
-            ),
+            border: Border.all(color: colors.cardBorder, width: 1.5),
           ),
           child: Row(
             children: [
-              // Contenedor del Ícono
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: colors.iconBackground, // Asignación directa
+                  color: colors.iconBackground,
                   shape: BoxShape.circle,
-                  border: Border.all(
-                    color: colors.iconBorder, // Asignación directa
-                  ),
+                  border: Border.all(color: colors.iconBorder),
                 ),
-                child: Icon(
-                  icon,
-                  color: colors.iconColor,
-                  size: 24,
-                ), // Asignación directa
+                child: Icon(icon, color: colors.iconColor, size: 24),
               ),
               const SizedBox(width: 16),
-
-              // Textos usando Expanded para evitar el Overflow
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -250,7 +247,7 @@ class _DashboardListTile extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
-                        color: colors.text, // Asignación directa
+                        color: colors.text,
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -258,19 +255,15 @@ class _DashboardListTile extends StatelessWidget {
                       subtitle,
                       style: TextStyle(
                         fontSize: 13,
-                        color: colors.text.withValues(
-                          alpha: 0.7,
-                        ), // Asignación directa
+                        color: colors.text.withValues(alpha: 0.7),
                       ),
                     ),
                   ],
                 ),
               ),
-
-              // Flecha derecha
               Icon(
                 Icons.chevron_right,
-                color: colors.text.withValues(alpha: 0.5), // Asignación directa
+                color: colors.text.withValues(alpha: 0.5),
               ),
             ],
           ),

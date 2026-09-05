@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'data/services/auth_service.dart';
 import 'core/user_session.dart';
 import 'core/ui_provider.dart';
@@ -13,6 +14,7 @@ import 'presentation/pages/admin/admin_dashboard_page.dart';
 void main() async {
   try {
     WidgetsFlutterBinding.ensureInitialized();
+    await initializeDateFormatting('es', null);
     runApp(
       MultiProvider(
         providers: [ChangeNotifierProvider(create: (_) => UiProvider())],

@@ -135,6 +135,112 @@ class _OrganizationStructureListPageState
     }
   }
 
+  Future<void> _showCloneDialog(Map<String, dynamic> originalNode) async {
+    final colors = Theme.of(context).extension<AppThemeColors>()!;
+    final nameCtrl = TextEditingController(
+      text: "${originalNode['name']} (Copia)",
+    );
+    final descCtrl = TextEditingController(
+      text: originalNode['description'] ?? '',
+    );
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: colors.cardBackground,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(color: colors.cardBorder),
+        ),
+        title: Text("Clonar Estructura", style: TextStyle(color: colors.text)),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                "Se duplicará esta estructura y todos los grupos/ministerios que dependan de ella.",
+                style: TextStyle(
+                  fontSize: 12,
+                  color: colors.text.withValues(alpha: 0.7),
+                ),
+              ),
+              const SizedBox(height: 15),
+              TextField(
+                controller: nameCtrl,
+                decoration: const InputDecoration(
+                  labelText: "Nuevo Nombre",
+                  prefixIcon: Icon(Icons.drive_file_rename_outline),
+                ),
+              ),
+              const SizedBox(height: 15),
+              TextField(
+                controller: descCtrl,
+                decoration: const InputDecoration(
+                  labelText: "Nueva Descripción",
+                  prefixIcon: Icon(Icons.description),
+                ),
+                maxLines: 2,
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text("Cancelar", style: TextStyle(color: colors.text)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: colors.buttonBackground,
+            ),
+            child: Text(
+              "Clonar Todo",
+              style: TextStyle(color: colors.buttonText),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+    if (nameCtrl.text.trim().isEmpty) return;
+
+    setState(() => _isLoading = true);
+    try {
+      await _repo.customPost(originalNode['id'], 'clone', {
+        "newName": nameCtrl.text.trim(),
+        "newDescription": descCtrl.text.trim(),
+      });
+      await _loadData();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              "Estructura clonada con éxito",
+              style: TextStyle(color: colors.text),
+            ),
+            backgroundColor: colors.successColor,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              "Error al clonar: $e",
+              style: TextStyle(color: colors.text),
+            ),
+            backgroundColor: colors.errorColor,
+          ),
+        );
+      }
+    }
+  }
+
   // --- RECURSIÓN PARA EL ÁRBOL ---
   List<Widget> _buildTreeNodes(
     int? parentId,
@@ -157,7 +263,7 @@ class _OrganizationStructureListPageState
         children: [
           Expanded(
             child: Text(
-              node['name'],
+              "Id: ${node['id']} - ${node['name']}",
               style: TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: 15,
@@ -183,8 +289,36 @@ class _OrganizationStructureListPageState
                 onSelected: (val) {
                   if (val == 'edit') _navigateToForm(node);
                   if (val == 'toggle') _toggleDeleteStatus(node);
+                  if (val == 'clone') _showCloneDialog(node);
                 },
                 itemBuilder: (ctx) => [
+                  // AGREGAR DEBAJO DE LA OPCIÓN "Editar"
+                  if (!isDeleted)
+                    PopupMenuItem(
+                      value: 'clone',
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: colors.iconBackground,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: colors.iconBorder),
+                            ),
+                            child: Icon(
+                              Icons.copy,
+                              size: 14,
+                              color: colors.iconColor,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            "Clonar (con hijos)",
+                            style: TextStyle(color: colors.text),
+                          ),
+                        ],
+                      ),
+                    ),
                   if (!isDeleted)
                     PopupMenuItem(
                       value: 'edit',

@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import '../../../../core/constants/api_constants.dart';
 import '../../../../data/repositories/generic_repository.dart';
 import '../../widgets/master_layout.dart';
-import '../../../../core/app_theme_colors.dart'; // <--- LA MOCHILA
+import '../../../../core/app_theme_colors.dart';
+import '../../../../core/ui_provider.dart';
+import '../../../../core/user_session.dart';
+import '../../../../core/system_role_manager.dart';
 import 'registry_event_detail_page.dart';
 
 class RegistryEventListPage extends StatefulWidget {
@@ -14,12 +18,15 @@ class RegistryEventListPage extends StatefulWidget {
 }
 
 class _RegistryEventListPageState extends State<RegistryEventListPage> {
-  final _repo = GenericRepository(endpoint: ApiConstants.registryEvents);
-  List<dynamic> _allItems = [];
-  List<dynamic> _filteredItems = [];
-  bool _isLoading = true;
+  final _registryRepo = GenericRepository(
+    endpoint: ApiConstants.registryEvents,
+  );
+  final _eventRepo = GenericRepository(endpoint: ApiConstants.events);
 
-  String _currentQuery = '';
+  List<dynamic> _allReports = [];
+  List<dynamic> _allEvents = [];
+  Map<String, Map<String, List<dynamic>>> _groupedByWeekAndEvent = {};
+  bool _isLoading = true;
 
   @override
   void initState() {
@@ -29,11 +36,16 @@ class _RegistryEventListPageState extends State<RegistryEventListPage> {
 
   Future<void> _loadData() async {
     try {
-      final data = await _repo.getAll();
+      final responses = await Future.wait([
+        _registryRepo.getAll(),
+        _eventRepo.getAll(),
+      ]);
+
       if (mounted) {
         setState(() {
-          _allItems = (data is List) ? data : [];
-          _applyFilters();
+          _allReports = (responses[0] is List) ? responses[0] : [];
+          _allEvents = (responses[1] is List) ? responses[1] : [];
+          _processAndGroupData();
           _isLoading = false;
         });
       }
@@ -42,30 +54,75 @@ class _RegistryEventListPageState extends State<RegistryEventListPage> {
     }
   }
 
-  void _applyFilters() {
-    List<dynamic> temp = _allItems;
-    if (_currentQuery.isNotEmpty) {
-      final lower = _currentQuery.toLowerCase();
-      temp = _allItems.where((item) {
-        final eventName = (item['eventName'] ?? '').toString().toLowerCase();
-        final leaderName = (item['leaderName'] ?? '').toString().toLowerCase();
-        final recordTypeName = (item['recordTypeName'] ?? '')
-            .toString()
-            .toLowerCase();
+  void _processAndGroupData() {
+    final uiProvider = Provider.of<UiProvider>(context, listen: false);
+    final customColors = uiProvider.customColors;
+    final int startDay = customColors?['firstDayOfWeek'] ?? 1;
 
-        return eventName.contains(lower) ||
-            leaderName.contains(lower) ||
-            recordTypeName.contains(lower);
-      }).toList();
+    // Estructura: Map<Semana, Map<NombreEvento, List<Reportes>>>
+    Map<String, Map<String, List<dynamic>>> groups = {};
+
+    // 1. Garantizamos la semana actual
+    final now = DateTime.now();
+    final currentWeekKey = _getWeekRangeText(now, startDay);
+    groups[currentWeekKey] = {};
+
+    // 2. Agrupamos por Semana -> Evento
+    for (var report in _allReports) {
+      final dateStr = report['registryDate'];
+      final DateTime date = dateStr != null
+          ? (DateTime.tryParse(dateStr) ?? DateTime.now()).toLocal()
+          : DateTime.now();
+
+      final weekRange = _getWeekRangeText(date, startDay);
+      final eventName = report['eventName'] ?? 'Evento sin Nombre';
+
+      if (!groups.containsKey(weekRange)) {
+        groups[weekRange] = {};
+      }
+      if (!groups[weekRange]!.containsKey(eventName)) {
+        groups[weekRange]![eventName] = [];
+      }
+      groups[weekRange]![eventName]!.add(report);
     }
-    setState(() => _filteredItems = temp);
+
+    setState(() {
+      _groupedByWeekAndEvent = groups;
+    });
   }
 
-  Future<void> _navigateToDetail(Map<String, dynamic> item) async {
+  String _getWeekRangeText(DateTime date, int startDay) {
+    int daysToSubtract;
+    if (startDay == 1) {
+      daysToSubtract = date.weekday - 1;
+    } else {
+      daysToSubtract = date.weekday == 7 ? 0 : date.weekday;
+    }
+
+    final startDate = DateTime(
+      date.year,
+      date.month,
+      date.day,
+    ).subtract(Duration(days: daysToSubtract));
+    final endDate = startDate.add(const Duration(days: 6));
+
+    final DateFormat formatter = DateFormat('dd/MM/yyyy');
+    return "Semana del ${formatter.format(startDate)} al ${formatter.format(endDate)}";
+  }
+
+  void _navigateToEventDetail(
+    String weekTitle,
+    String eventName,
+    List<dynamic> eventReports,
+  ) {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => RegistryEventDetailPage(eventData: item),
+        builder: (_) => RegistryEventDetailPage(
+          weekTitle: weekTitle,
+          eventName: eventName,
+          reportsList: eventReports,
+        ),
       ),
     );
   }
@@ -73,219 +130,171 @@ class _RegistryEventListPageState extends State<RegistryEventListPage> {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AppThemeColors>()!;
+    final session = UserSession();
+    final normalizedRole = SystemRoles.normalize(session.role);
+    final isSuperAdmin = normalizedRole == SystemRoles.superAdmin;
+
+    final weekKeys = _groupedByWeekAndEvent.keys.toList();
 
     return MasterLayout(
-      title: "Bitácora de Eventos",
+      title: isSuperAdmin
+          ? "Bitácora Global (SuperAdmin)"
+          : "Historial de Reportes",
       mode: PageMode.list,
-      enableSearch: true,
-      onSearch: (q) {
-        _currentQuery = q;
-        _applyFilters();
-      },
       child: _isLoading
           ? Center(
               child: CircularProgressIndicator(color: colors.iconBackground),
             )
-          : _filteredItems.isEmpty
-          ? Center(
-              child: Text(
-                "No hay reportes registrados",
-                style: TextStyle(color: colors.text),
-              ),
-            )
           : ListView.builder(
               padding: const EdgeInsets.all(12),
-              itemCount: _filteredItems.length,
+              itemCount: weekKeys.length,
               itemBuilder: (context, index) {
-                final item = _filteredItems[index];
-
-                final eventName = item['eventName'] ?? 'Evento sin nombre';
-                final formName = item['recordTypeName'] ?? 'Formulario';
-                final leader = item['leaderName'] ?? 'Sin líder';
-
-                final dateStr = item['registryDate'];
-                final date = dateStr != null
-                    ? DateTime.tryParse(dateStr) ?? DateTime.now()
-                    : DateTime.now();
+                final weekTitle = weekKeys[index];
+                final eventsMap = _groupedByWeekAndEvent[weekTitle]!;
 
                 return Card(
                   elevation: 2,
-                  margin: const EdgeInsets.only(bottom: 12),
+                  margin: const EdgeInsets.only(bottom: 14),
                   color: colors.cardBackground,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                     side: BorderSide(color: colors.cardBorder, width: 1.5),
                   ),
                   child: Padding(
-                    padding: const EdgeInsets.all(12.0),
-                    child: Row(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Ícono
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: colors.iconBackground,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: colors.iconBorder),
-                          ),
-                          child: Icon(
-                            Icons.assignment_turned_in,
-                            color: colors.iconColor,
-                            size: 20,
-                          ),
+                        // CABECERA DE LA SEMANA
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.date_range,
+                              color: colors.iconBackground,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              weekTitle,
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15,
+                                color: colors.text,
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 16),
+                        Divider(color: colors.cardBorder, height: 20),
 
-                        // Info Central
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      eventName,
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 16,
-                                        color: colors.text,
-                                      ),
-                                    ),
+                        // SI NO HAY REPORTES EN LA SEMANA
+                        if (eventsMap.isEmpty)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 4.0),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.pending_actions,
+                                  size: 14,
+                                  color: colors.text.withValues(alpha: 0.5),
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  "Sin reportes enviados en esta semana aún.",
+                                  style: TextStyle(
+                                    color: colors.text.withValues(alpha: 0.6),
+                                    fontSize: 13,
+                                    fontStyle: FontStyle.italic,
                                   ),
-                                  // Menú Kebab Unificado
-                                  SizedBox(
-                                    width: 24,
-                                    height: 24,
-                                    child: PopupMenuButton<String>(
-                                      color: colors.cardBackground,
-                                      padding: EdgeInsets.zero,
-                                      icon: Icon(
-                                        Icons.more_vert,
-                                        size: 20,
-                                        color: colors.text.withValues(
-                                          alpha: 0.7,
+                                ),
+                              ],
+                            ),
+                          )
+                        else
+                          // FILAS INDIVIDUALES POR EVENTO (DISCRIMINADAS Y CLICKEABLES)
+                          Column(
+                            children: eventsMap.entries.map((entry) {
+                              final eventName = entry.key;
+                              final reports = entry.value;
+
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 6.0),
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(8),
+                                  onTap: () => _navigateToEventDetail(
+                                    weekTitle,
+                                    eventName,
+                                    reports,
+                                  ),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 8,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: colors.inputBackground.withValues(
+                                        alpha: 0.4,
+                                      ),
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(
+                                        color: colors.cardBorder.withValues(
+                                          alpha: 0.5,
                                         ),
                                       ),
-                                      onSelected: (val) {
-                                        if (val == 'view')
-                                          _navigateToDetail(item);
-                                      },
-                                      itemBuilder: (ctx) => [
-                                        PopupMenuItem(
-                                          value: 'view',
-                                          child: Row(
-                                            children: [
-                                              Container(
-                                                padding: const EdgeInsets.all(
-                                                  4,
-                                                ),
-                                                decoration: BoxDecoration(
-                                                  color: colors.iconBackground,
-                                                  shape: BoxShape.circle,
-                                                  border: Border.all(
-                                                    color: colors.iconBorder,
-                                                  ),
-                                                ),
-                                                child: Icon(
-                                                  Icons.visibility,
-                                                  size: 14,
-                                                  color: colors.iconColor,
-                                                ),
-                                              ),
-                                              const SizedBox(width: 8),
-                                              Text(
-                                                "Ver Detalles",
-                                                style: TextStyle(
-                                                  color: colors.text,
-                                                ),
-                                              ),
-                                            ],
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          Icons.assignment_turned_in,
+                                          size: 16,
+                                          color: colors.iconBackground,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            eventName,
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.w600,
+                                              color: colors.text,
+                                              fontSize: 13,
+                                            ),
+                                          ),
+                                        ),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 2,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: colors.iconBackground
+                                                .withValues(alpha: 0.15),
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
+                                          ),
+                                          child: Text(
+                                            "${reports.length} cargado(s)",
+                                            style: TextStyle(
+                                              color: colors.iconBackground,
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Icon(
+                                          Icons.chevron_right,
+                                          size: 18,
+                                          color: colors.text.withValues(
+                                            alpha: 0.5,
                                           ),
                                         ),
                                       ],
                                     ),
                                   ),
-                                ],
-                              ),
-                              const SizedBox(height: 6),
-
-                              Row(
-                                children: [
-                                  Icon(
-                                    Icons.description_outlined,
-                                    size: 12,
-                                    color: colors.text.withValues(alpha: 0.5),
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Expanded(
-                                    child: Text(
-                                      formName,
-                                      style: TextStyle(
-                                        color: colors.text.withValues(
-                                          alpha: 0.8,
-                                        ),
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 4),
-
-                              Row(
-                                children: [
-                                  Icon(
-                                    Icons.person_outline,
-                                    size: 12,
-                                    color: colors.text.withValues(alpha: 0.5),
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Expanded(
-                                    child: Text(
-                                      "Por: $leader",
-                                      style: TextStyle(
-                                        color: colors.text.withValues(
-                                          alpha: 0.8,
-                                        ),
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 4),
-
-                              Row(
-                                children: [
-                                  Icon(
-                                    Icons.calendar_today,
-                                    size: 12,
-                                    color: colors.text.withValues(alpha: 0.5),
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Expanded(
-                                    child: Text(
-                                      DateFormat(
-                                        'EEEE d, MMM yyyy - HH:mm',
-                                        'es',
-                                      ).format(date.toLocal()),
-                                      style: TextStyle(
-                                        color: colors.text.withValues(
-                                          alpha: 0.6,
-                                        ),
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
+                                ),
+                              );
+                            }).toList(),
                           ),
-                        ),
                       ],
                     ),
                   ),

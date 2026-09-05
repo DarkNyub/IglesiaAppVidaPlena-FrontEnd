@@ -213,7 +213,7 @@ class _SimpleCatalogPageState extends State<SimpleCatalogPage> {
       final payload = {"id": id, "name": name, "key": key, "description": desc};
       await _repo.save(payload);
       _loadData();
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -223,6 +223,7 @@ class _SimpleCatalogPageState extends State<SimpleCatalogPage> {
             backgroundColor: colors.successColor,
           ),
         );
+      }
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -288,7 +289,7 @@ class _SimpleCatalogPageState extends State<SimpleCatalogPage> {
         await _repo.delete(id);
       }
       await _loadData();
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -298,6 +299,7 @@ class _SimpleCatalogPageState extends State<SimpleCatalogPage> {
             backgroundColor: colors.successColor,
           ),
         );
+      }
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -455,8 +457,9 @@ class _SimpleCatalogPageState extends State<SimpleCatalogPage> {
                                         ),
                                         onSelected: (val) {
                                           if (val == 'edit') _showForm(item);
-                                          if (val == 'toggle')
+                                          if (val == 'toggle') {
                                             _toggleDeleteStatus(item);
+                                          }
                                         },
                                         itemBuilder: (ctx) => [
                                           if (!isDeleted)

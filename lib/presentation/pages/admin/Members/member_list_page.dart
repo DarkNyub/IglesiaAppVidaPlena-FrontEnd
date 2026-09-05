@@ -342,19 +342,19 @@ class _MemberListPageState extends State<MemberListPage> {
 
   Future<void> _handleBulkUpload() async {
     try {
-      FilePickerResult? result = await FilePicker.pickFiles(
+      List<PlatformFile> result = await FilePicker.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['xlsx', 'xls'],
-        withData: true,
       );
 
-      if (result == null) return;
+      if (result.isEmpty) return;
 
       setState(() => _isLoading = true);
 
-      Uint8List? bytes = result.files.first.bytes;
-      if (bytes == null)
+      Uint8List? bytes = await result.first.readAsBytes();
+      if (bytes == null) {
         throw Exception("No se pudieron leer los datos del archivo.");
+      }
 
       var excel = Excel.decodeBytes(bytes);
       List<Map<String, dynamic>> membersToUpload = [];
@@ -366,18 +366,21 @@ class _MemberListPageState extends State<MemberListPage> {
         var row = rows[i];
         if (row.isEmpty ||
             row[0]?.value == null ||
-            row[0]!.value.toString().trim().isEmpty)
+            row[0]!.value.toString().trim().isEmpty) {
           continue;
+        }
 
         // Parseo seguro de números (IDs)
         int? structureId;
         int? roleId;
-        if (row.length > 6 && row[6]?.value != null)
+        if (row.length > 6 && row[6]?.value != null) {
           structureId = int.tryParse(
             row[6]!.value.toString().replaceAll('.0', ''),
           );
-        if (row.length > 7 && row[7]?.value != null)
+        }
+        if (row.length > 7 && row[7]?.value != null) {
           roleId = int.tryParse(row[7]!.value.toString().replaceAll('.0', ''));
+        }
 
         Map<String, dynamic> memberPayload = {
           "firstName": row[0]?.value?.toString().trim() ?? "",
@@ -482,353 +485,360 @@ class _MemberListPageState extends State<MemberListPage> {
               padding: const EdgeInsets.all(12),
               itemCount: _filteredItems.length,
               itemBuilder: (context, index) {
-                final item = _filteredItems[index];
-                final fullName =
-                    "${item['firstName'] ?? ''} ${item['lastName'] ?? ''}"
-                        .trim();
-                final email = item['email'] ?? '';
-                final phone = item['phone'] ?? '';
-                final bool isDeleted = item['isDeleted'] ?? false;
-                final bool isActive = !isDeleted;
-                final linkedUser = item['linkedUser'];
-                final List<dynamic> rolesSummary = item['rolesSummary'] ?? [];
-
-                return Card(
-                  elevation: 2,
-                  margin: const EdgeInsets.only(bottom: 10),
-                  color: colors.cardBackground,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    side: BorderSide(
-                      color: isDeleted ? colors.errorColor : colors.cardBorder,
-                      width: 1.5,
-                    ),
+                return _MemberCardItem(
+                  item: _filteredItems[index],
+                  colors: colors,
+                  canManageStatus: canManageStatus,
+                  onEdit: () => _navigateToForm(_filteredItems[index]),
+                  onToggle: () => _toggleMemberStatus(_filteredItems[index]),
+                  onUser: () {
+                    final linkedUser = _filteredItems[index]['linkedUser'];
+                    if (linkedUser != null) _navigateToUser(linkedUser);
+                  },
+                  onShowRoles: () => _showRolesPopup(
+                    _filteredItems[index]['rolesSummary'] ?? [],
+                    colors,
                   ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(12.0),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Column(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: colors.iconBackground,
-                                shape: BoxShape.circle,
-                                border: Border.all(color: colors.iconBorder),
-                              ),
-                              child: Text(
-                                fullName.isNotEmpty
-                                    ? fullName[0].toUpperCase()
-                                    : "?",
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: colors.iconColor,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 4,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color:
-                                    (isActive
-                                            ? colors.successColor
-                                            : colors.errorColor)
-                                        .withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(4),
-                                border: Border.all(
-                                  color:
-                                      (isActive
-                                              ? colors.successColor
-                                              : colors.errorColor)
-                                          .withValues(alpha: 0.3),
-                                ),
-                              ),
-                              child: Text(
-                                isActive ? "ACTIVO" : "INACT.",
-                                style: TextStyle(
-                                  fontSize: 8,
-                                  fontWeight: FontWeight.bold,
-                                  color: isActive
-                                      ? colors.successColor
-                                      : colors.errorColor,
-                                ),
-                              ),
-                            ),
-                            if (linkedUser != null) ...[
-                              const SizedBox(height: 6),
-                              InkWell(
-                                onTap: () => _navigateToUser(linkedUser),
-                                borderRadius: BorderRadius.circular(4),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 5,
-                                    vertical: 3,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: colors.iconBackground,
-                                    borderRadius: BorderRadius.circular(4),
-                                    border: Border.all(
-                                      color: colors.iconBorder,
-                                    ),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Icon(
-                                        Icons.person,
-                                        size: 10,
-                                        color: colors.iconColor,
-                                      ),
-                                      const SizedBox(width: 2),
-                                      Text(
-                                        "USER",
-                                        style: TextStyle(
-                                          fontSize: 8,
-                                          fontWeight: FontWeight.bold,
-                                          color: colors.iconColor,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                        const SizedBox(width: 12),
-
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Expanded(
-                                    child: Row(
-                                      children: [
-                                        Flexible(
-                                          child: Text(
-                                            fullName,
-                                            style: TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 15,
-                                              color: isActive
-                                                  ? colors.text
-                                                  : colors.text.withValues(
-                                                      alpha: 0.5,
-                                                    ),
-                                            ),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 4),
-                                        SizedBox(
-                                          width: 20,
-                                          height: 20,
-                                          child: IconButton(
-                                            padding: EdgeInsets.zero,
-                                            icon: Icon(
-                                              Icons.copy,
-                                              size: 13,
-                                              color: colors.text.withValues(
-                                                alpha: 0.4,
-                                              ),
-                                            ),
-                                            onPressed: () => _copyToClipboard(
-                                              fullName,
-                                              "Nombre",
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  SizedBox(
-                                    width: 24,
-                                    height: 24,
-                                    child: PopupMenuButton<String>(
-                                      color: colors.cardBackground,
-                                      padding: EdgeInsets.zero,
-                                      icon: Icon(
-                                        Icons.more_vert,
-                                        size: 20,
-                                        color: colors.text.withValues(
-                                          alpha: 0.7,
-                                        ),
-                                      ),
-                                      onSelected: (val) {
-                                        if (val == 'edit')
-                                          _navigateToForm(item);
-                                        if (val == 'toggle')
-                                          _toggleMemberStatus(item);
-                                      },
-                                      itemBuilder: (ctx) => [
-                                        PopupMenuItem(
-                                          value: 'edit',
-                                          child: Row(
-                                            children: [
-                                              Container(
-                                                padding: const EdgeInsets.all(
-                                                  4,
-                                                ),
-                                                decoration: BoxDecoration(
-                                                  color: colors.iconBackground,
-                                                  shape: BoxShape.circle,
-                                                  border: Border.all(
-                                                    color: colors.iconBorder,
-                                                  ),
-                                                ),
-                                                child: Icon(
-                                                  Icons.edit,
-                                                  size: 14,
-                                                  color: colors.iconColor,
-                                                ),
-                                              ),
-                                              const SizedBox(width: 8),
-                                              Text(
-                                                "Editar",
-                                                style: TextStyle(
-                                                  color: colors.text,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                        if (canManageStatus)
-                                          PopupMenuItem(
-                                            value: 'toggle',
-                                            child: Row(
-                                              children: [
-                                                Container(
-                                                  padding: const EdgeInsets.all(
-                                                    4,
-                                                  ),
-                                                  decoration: BoxDecoration(
-                                                    color:
-                                                        colors.iconBackground,
-                                                    shape: BoxShape.circle,
-                                                    border: Border.all(
-                                                      color: colors.iconBorder,
-                                                    ),
-                                                  ),
-                                                  child: Icon(
-                                                    isActive
-                                                        ? Icons.person_off
-                                                        : Icons.person_add,
-                                                    size: 14,
-                                                    color: colors.iconColor,
-                                                  ),
-                                                ),
-                                                const SizedBox(width: 8),
-                                                Text(
-                                                  isActive
-                                                      ? "Dar de Baja"
-                                                      : "Activar",
-                                                  style: TextStyle(
-                                                    color: colors.text,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 6),
-                              Row(
-                                children: [
-                                  InkWell(
-                                    onTap: () =>
-                                        _showRolesPopup(rolesSummary, colors),
-                                    borderRadius: BorderRadius.circular(20),
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 6,
-                                        vertical: 2,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: colors.text.withValues(
-                                          alpha: 0.05,
-                                        ),
-                                        borderRadius: BorderRadius.circular(20),
-                                        border: Border.all(
-                                          color: colors.cardBorder,
-                                        ),
-                                      ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(
-                                            Icons.assignment_ind_outlined,
-                                            size: 12,
-                                            color: colors.text.withValues(
-                                              alpha: 0.8,
-                                            ),
-                                          ),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            "${rolesSummary.length} Cargo(s)",
-                                            style: TextStyle(
-                                              color: colors.text.withValues(
-                                                alpha: 0.8,
-                                              ),
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  if (phone.isNotEmpty &&
-                                      phone != 'Sin teléfono')
-                                    Expanded(
-                                      child: _copyableRow(
-                                        Icons.phone_outlined,
-                                        phone,
-                                        "Teléfono",
-                                        colors.text,
-                                      ),
-                                    ),
-                                ],
-                              ),
-                              const SizedBox(height: 6),
-                              if (email.isNotEmpty && email != 'Sin email')
-                                _copyableRow(
-                                  Icons.email_outlined,
-                                  email,
-                                  "Email",
-                                  colors.text,
-                                ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                  onCopy: (text, type) => _copyToClipboard(text, type),
                 );
               },
             ),
     );
   }
+}
 
-  Widget _copyableRow(
-    IconData icon,
-    String text,
-    String type,
-    Color textColor,
-  ) {
+class _MemberCardItem extends StatelessWidget {
+  final Map<String, dynamic> item;
+  final AppThemeColors colors;
+  final bool canManageStatus;
+  final VoidCallback onEdit;
+  final VoidCallback onToggle;
+  final VoidCallback onUser;
+  final VoidCallback onShowRoles;
+  final Function(String, String) onCopy;
+
+  const _MemberCardItem({
+    required this.item,
+    required this.colors,
+    required this.canManageStatus,
+    required this.onEdit,
+    required this.onToggle,
+    required this.onUser,
+    required this.onShowRoles,
+    required this.onCopy,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final idItem = item['id'] ?? '';
+    final fullName = "${item['firstName'] ?? ''} ${item['lastName'] ?? ''}"
+        .trim();
+    final email = item['email'] ?? '';
+    final phone = item['phone'] ?? '';
+    final bool isDeleted = item['isDeleted'] ?? false;
+    final bool isActive = !isDeleted;
+    final linkedUser = item['linkedUser'];
+    final List<dynamic> rolesSummary = item['rolesSummary'] ?? [];
+
+    return Card(
+      elevation: 2,
+      margin: const EdgeInsets.only(bottom: 10),
+      color: colors.cardBackground,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+          color: isDeleted ? colors.errorColor : colors.cardBorder,
+          width: 1.5,
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12.0),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Column(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: colors.iconBackground,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: colors.iconBorder),
+                  ),
+                  child: Text(
+                    fullName.isNotEmpty ? fullName[0].toUpperCase() : "?",
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: colors.iconColor,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: (isActive ? colors.successColor : colors.errorColor)
+                        .withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(
+                      color:
+                          (isActive ? colors.successColor : colors.errorColor)
+                              .withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Text(
+                    isActive ? "ACTIVO" : "INACT.",
+                    style: TextStyle(
+                      fontSize: 8,
+                      fontWeight: FontWeight.bold,
+                      color: isActive ? colors.successColor : colors.errorColor,
+                    ),
+                  ),
+                ),
+                if (linkedUser != null) ...[
+                  const SizedBox(height: 6),
+                  InkWell(
+                    onTap: onUser,
+                    borderRadius: BorderRadius.circular(4),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 5,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: colors.iconBackground,
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: colors.iconBorder),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.person, size: 10, color: colors.iconColor),
+                          const SizedBox(width: 2),
+                          Text(
+                            "USER",
+                            style: TextStyle(
+                              fontSize: 8,
+                              fontWeight: FontWeight.bold,
+                              color: colors.iconColor,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                "Id: $idItem - $fullName",
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 15,
+                                  color: isActive
+                                      ? colors.text
+                                      : colors.text.withValues(alpha: 0.5),
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: IconButton(
+                                padding: EdgeInsets.zero,
+                                icon: Icon(
+                                  Icons.copy,
+                                  size: 13,
+                                  color: colors.text.withValues(alpha: 0.4),
+                                ),
+                                onPressed: () => onCopy(fullName, "Nombre"),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: PopupMenuButton<String>(
+                          color: colors.cardBackground,
+                          padding: EdgeInsets.zero,
+                          icon: Icon(
+                            Icons.more_vert,
+                            size: 20,
+                            color: colors.text.withValues(alpha: 0.7),
+                          ),
+                          onSelected: (val) {
+                            if (val == 'edit') onEdit();
+                            if (val == 'toggle') onToggle();
+                          },
+                          itemBuilder: (ctx) => [
+                            PopupMenuItem(
+                              value: 'edit',
+                              child: Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(4),
+                                    decoration: BoxDecoration(
+                                      color: colors.iconBackground,
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: colors.iconBorder,
+                                      ),
+                                    ),
+                                    child: Icon(
+                                      Icons.edit,
+                                      size: 14,
+                                      color: colors.iconColor,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    "Editar",
+                                    style: TextStyle(color: colors.text),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (canManageStatus)
+                              PopupMenuItem(
+                                value: 'toggle',
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(4),
+                                      decoration: BoxDecoration(
+                                        color: colors.iconBackground,
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                          color: colors.iconBorder,
+                                        ),
+                                      ),
+                                      child: Icon(
+                                        isActive
+                                            ? Icons.person_off
+                                            : Icons.person_add,
+                                        size: 14,
+                                        color: colors.iconColor,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      isActive ? "Dar de Baja" : "Activar",
+                                      style: TextStyle(color: colors.text),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      InkWell(
+                        onTap: onShowRoles,
+                        borderRadius: BorderRadius.circular(20),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: colors.text.withValues(alpha: 0.05),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: colors.cardBorder),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.assignment_ind_outlined,
+                                size: 12,
+                                color: colors.text.withValues(alpha: 0.8),
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                "${rolesSummary.length} Cargo(s)",
+                                style: TextStyle(
+                                  color: colors.text.withValues(alpha: 0.8),
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      if (phone.isNotEmpty && phone != 'Sin teléfono')
+                        Expanded(
+                          child: _CopyableRow(
+                            icon: Icons.phone_outlined,
+                            text: phone,
+                            type: "Teléfono",
+                            textColor: colors.text,
+                            onCopy: onCopy,
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  if (email.isNotEmpty && email != 'Sin email')
+                    _CopyableRow(
+                      icon: Icons.email_outlined,
+                      text: email,
+                      type: "Email",
+                      textColor: colors.text,
+                      onCopy: onCopy,
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CopyableRow extends StatelessWidget {
+  final IconData icon;
+  final String text;
+  final String type;
+  final Color textColor;
+  final Function(String, String) onCopy;
+
+  const _CopyableRow({
+    required this.icon,
+    required this.text,
+    required this.type,
+    required this.textColor,
+    required this.onCopy,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -856,7 +866,7 @@ class _MemberListPageState extends State<MemberListPage> {
               size: 12,
               color: textColor.withValues(alpha: 0.3),
             ),
-            onPressed: () => _copyToClipboard(text, type),
+            onPressed: () => onCopy(text, type),
           ),
         ),
       ],

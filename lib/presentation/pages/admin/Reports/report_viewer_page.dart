@@ -128,13 +128,14 @@ class _ReportViewerPageState extends State<ReportViewerPage> {
   }
 
   Widget _buildChart(int typeId, AppThemeColors colors) {
-    if (_chartPoints.isEmpty)
+    if (_chartPoints.isEmpty) {
       return Center(
         child: Text(
           "No hay datos para mostrar",
           style: TextStyle(color: colors.text),
         ),
       );
+    }
 
     switch (typeId) {
       case 1:

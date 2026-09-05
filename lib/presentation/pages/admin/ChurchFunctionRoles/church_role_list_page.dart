@@ -206,6 +206,7 @@ class _ChurchRoleListPageState extends State<ChurchRoleListPage> {
               itemCount: _filteredItems.length,
               itemBuilder: (context, index) {
                 final item = _filteredItems[index];
+                final idItem = item['id'] ?? '';
                 final name = item['name'] ?? 'Sin Nombre';
                 final desc = item['description'] ?? '';
                 final int authority =
@@ -283,7 +284,7 @@ class _ChurchRoleListPageState extends State<ChurchRoleListPage> {
                                 children: [
                                   Expanded(
                                     child: Text(
-                                      name,
+                                      "Id: $idItem - $name",
                                       style: TextStyle(
                                         fontWeight: FontWeight.bold,
                                         fontSize: 16,
@@ -311,10 +312,12 @@ class _ChurchRoleListPageState extends State<ChurchRoleListPage> {
                                           ),
                                         ),
                                         onSelected: (val) {
-                                          if (val == 'edit')
+                                          if (val == 'edit') {
                                             _navigateToForm(item);
-                                          if (val == 'toggle')
+                                          }
+                                          if (val == 'toggle') {
                                             _toggleDeleteStatus(item);
+                                          }
                                         },
                                         itemBuilder: (ctx) => [
                                           if (!isDeleted)

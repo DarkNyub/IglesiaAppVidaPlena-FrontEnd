@@ -76,7 +76,6 @@ class _UserFormPageState extends State<UserFormPage> {
                   final bool isCurrentMember =
                       currentMemberId != null && m['id'] == currentMemberId;
 
-                  // Regla de oro: No borrado Y (no tiene cuenta o es el mío)
                   return !isDeleted && (!hasUserAssigned || isCurrentMember);
                 }).toList()..sort(
                   (a, b) => (a['firstName'] ?? '').toString().compareTo(
@@ -86,7 +85,6 @@ class _UserFormPageState extends State<UserFormPage> {
           } else {
             _availableMembers = [];
           }
-          // --------------------------------------------------------------
 
           if (widget.existingUser != null) {
             _populateExistingUser(widget.existingUser!);
@@ -223,6 +221,22 @@ class _UserFormPageState extends State<UserFormPage> {
     return "Miembro asociado";
   }
 
+  // 🔥 MOSTRAR MODAL DE BÚSQUEDA DE MIEMBRO
+  void _openMemberSearchDialog(AppThemeColors colors) {
+    showDialog(
+      context: context,
+      builder: (ctx) => _MemberSearchModal(
+        members: _availableMembers,
+        colors: colors,
+        onSelected: (member) {
+          setState(() {
+            _selectedMemberId = member['id'];
+          });
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AppThemeColors>()!;
@@ -231,6 +245,11 @@ class _UserFormPageState extends State<UserFormPage> {
       fontSize: 18,
       fontWeight: FontWeight.bold,
       color: colors.text.withValues(alpha: 0.8),
+    );
+
+    final selectedMember = _availableMembers.firstWhere(
+      (m) => m['id'] == _selectedMemberId,
+      orElse: () => null,
     );
 
     return MasterLayout(
@@ -250,39 +269,101 @@ class _UserFormPageState extends State<UserFormPage> {
                     Text("Configuración de Acceso", style: sectionTitleStyle),
                     const SizedBox(height: 15),
 
-                    // --- TRUCO VISUAL DE UX ---
-                    isEditing
-                        ? AppTextField(
-                            controller: TextEditingController(
-                              text: _getMemberNameForReadOnly(),
-                            ),
-                            label: "Miembro Asociado",
-                            prefixIcon:
-                                Icons.lock_person, // Un icono de candado sutil
-                            readOnly: true,
-                          )
-                        : AppDropdown<int>(
-                            value: _selectedMemberId,
-                            label: "Vincular a Miembro",
-                            onChanged: _lockMemberSelection
-                                ? null
-                                : (val) =>
-                                      setState(() => _selectedMemberId = val),
-                            items: _availableMembers.map<DropdownMenuItem<int>>((
-                              member,
-                            ) {
-                              final name =
-                                  "${member['firstName']} ${member['lastName']}";
-                              return DropdownMenuItem<int>(
-                                value: member['id'],
-                                child: Text(
-                                  name,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              );
-                            }).toList(),
-                            validator: (v) => v == null ? "Requerido" : null,
+                    // --- BUSCADOR CON LÍMITE DE RESULTADOS O MODO LECTURA ---
+                    if (isEditing || _lockMemberSelection)
+                      AppTextField(
+                        controller: TextEditingController(
+                          text: _getMemberNameForReadOnly(),
+                        ),
+                        label: "Miembro Asociado",
+                        prefixIcon: Icons.lock_person,
+                        readOnly: true,
+                      )
+                    else ...[
+                      // TARJETA DE SELECCIÓN DE MIEMBRO CON BUSCADOR MODAL
+                      InkWell(
+                        onTap: () => _openMemberSearchDialog(colors),
+                        borderRadius: BorderRadius.circular(8),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 14,
                           ),
+                          decoration: BoxDecoration(
+                            color: colors.cardBackground,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: _selectedMemberId == null
+                                  ? colors.cardBorder
+                                  : colors.iconBackground,
+                              width: _selectedMemberId == null ? 1 : 1.5,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.person_search,
+                                color: colors.iconColor,
+                                size: 22,
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      "Vincular a Miembro",
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: colors.text.withValues(
+                                          alpha: 0.6,
+                                        ),
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      selectedMember != null
+                                          ? "${selectedMember['firstName']} ${selectedMember['lastName']}"
+                                          : "Toca para buscar y seleccionar...",
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        color: selectedMember != null
+                                            ? colors.text
+                                            : colors.text.withValues(
+                                                alpha: 0.5,
+                                              ),
+                                        fontWeight: selectedMember != null
+                                            ? FontWeight.w600
+                                            : FontWeight.normal,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Icon(
+                                Icons.arrow_drop_down,
+                                color: colors.text.withValues(alpha: 0.7),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      if (_selectedMemberId == null)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 12, top: 4),
+                          child: Text(
+                            "Requerido",
+                            style: TextStyle(
+                              color: colors.errorColor,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ),
+                      const SizedBox(height: 15),
+                    ],
 
                     AppTextField(
                       controller: _usernameCtrl,
@@ -299,10 +380,12 @@ class _UserFormPageState extends State<UserFormPage> {
                           : "Contraseña",
                       prefixIcon: Icons.lock,
                       validator: (v) {
-                        if (!isEditing && (v == null || v.isEmpty))
+                        if (!isEditing && (v == null || v.isEmpty)) {
                           return "Requerido";
-                        if (v != null && v.isNotEmpty && v.length < 6)
+                        }
+                        if (v != null && v.isNotEmpty && v.length < 6) {
                           return "Mínimo 6 caracteres";
+                        }
                         return null;
                       },
                     ),
@@ -386,7 +469,7 @@ class _UserFormPageState extends State<UserFormPage> {
                           ),
                           trailing: Switch(
                             value: _isActive,
-                            activeColor: colors.iconBackground,
+                            activeThumbColor: colors.iconBackground,
                             inactiveThumbColor: colors.text.withValues(
                               alpha: 0.5,
                             ),
@@ -456,6 +539,195 @@ class _UserFormPageState extends State<UserFormPage> {
                 ),
               ),
             ),
+    );
+  }
+}
+
+// ============================================================================
+// 🔥 COMPONENTE MODAL: BUSCADOR DE MIEMBROS CON LÍMITE DE 6 RESULTADOS
+// ============================================================================
+class _MemberSearchModal extends StatefulWidget {
+  final List<dynamic> members;
+  final AppThemeColors colors;
+  final ValueChanged<Map<String, dynamic>> onSelected;
+
+  const _MemberSearchModal({
+    required this.members,
+    required this.colors,
+    required this.onSelected,
+  });
+
+  @override
+  State<_MemberSearchModal> createState() => _MemberSearchModalState();
+}
+
+class _MemberSearchModalState extends State<_MemberSearchModal> {
+  String _query = '';
+  final _searchCtrl = TextEditingController();
+
+  @override
+  Widget build(BuildContext context) {
+    // 1. Filtrar por nombre / apellido
+    final filtered = widget.members.where((m) {
+      final name = "${m['firstName'] ?? ''} ${m['lastName'] ?? ''}"
+          .toLowerCase();
+      return name.contains(_query.toLowerCase());
+    }).toList();
+
+    // 2. 🔥 REGLA DE ORO: Máximo 6 resultados a lo mucho
+    final limitedResults = filtered.take(6).toList();
+
+    return Dialog(
+      backgroundColor: widget.colors.cardBackground,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: widget.colors.cardBorder),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  "Buscar Miembro",
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: widget.colors.text,
+                  ),
+                ),
+                IconButton(
+                  icon: Icon(Icons.close, color: widget.colors.text),
+                  onPressed: () => Navigator.pop(context),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            // CAJA DE BÚSQUEDA
+            TextField(
+              controller: _searchCtrl,
+              autofocus: true,
+              style: TextStyle(color: widget.colors.text, fontSize: 14),
+              decoration: InputDecoration(
+                hintText: "Escribe un nombre...",
+                hintStyle: TextStyle(
+                  color: widget.colors.text.withValues(alpha: 0.5),
+                  fontSize: 13,
+                ),
+                prefixIcon: Icon(
+                  Icons.search,
+                  color: widget.colors.iconColor,
+                  size: 20,
+                ),
+                filled: true,
+                fillColor: widget.colors.inputBackground,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: widget.colors.cardBorder),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: widget.colors.iconBackground),
+                ),
+              ),
+              onChanged: (val) => setState(() => _query = val),
+            ),
+            const SizedBox(height: 12),
+
+            // INDICADOR DE COINCIDENCIAS / AYUDA VISUAL
+            Text(
+              _query.isEmpty
+                  ? "Escriba para filtrar los miembros disponibles:"
+                  : "Mostrando ${limitedResults.length} de ${filtered.length} coincidencias:",
+              style: TextStyle(
+                fontSize: 11,
+                color: widget.colors.text.withValues(alpha: 0.6),
+              ),
+            ),
+            const SizedBox(height: 8),
+
+            // LISTA RESTRINGIDA (MÁXIMO 6)
+            if (limitedResults.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 20),
+                child: Center(
+                  child: Text(
+                    "No se encontraron miembros.",
+                    style: TextStyle(
+                      color: widget.colors.text.withValues(alpha: 0.5),
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+              )
+            else
+              Flexible(
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: limitedResults.length,
+                  separatorBuilder: (_, __) =>
+                      Divider(color: widget.colors.cardBorder, height: 1),
+                  itemBuilder: (ctx, idx) {
+                    final member = limitedResults[idx];
+                    final fullName =
+                        "${member['firstName']} ${member['lastName']}";
+                    final email = member['email'] ?? 'Sin correo';
+
+                    return ListTile(
+                      dense: true,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
+                      leading: CircleAvatar(
+                        radius: 14,
+                        backgroundColor: widget.colors.iconBackground,
+                        child: Text(
+                          fullName.isNotEmpty ? fullName[0].toUpperCase() : '?',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: widget.colors.iconColor,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      title: Text(
+                        fullName,
+                        style: TextStyle(
+                          color: widget.colors.text,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                        ),
+                      ),
+                      subtitle: Text(
+                        email,
+                        style: TextStyle(
+                          color: widget.colors.text.withValues(alpha: 0.6),
+                          fontSize: 11,
+                        ),
+                      ),
+                      onTap: () {
+                        widget.onSelected(member);
+                        Navigator.pop(context);
+                      },
+                    );
+                  },
+                ),
+              ),
+          ],
+        ),
+      ),
     );
   }
 }

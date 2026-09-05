@@ -23,7 +23,10 @@ class _ReportExportPageState extends State<ReportExportPage> {
 
   DateTime? _startDate;
   DateTime? _endDate;
-  bool _isGenerating = false;
+
+  bool _isLoading = false;
+  List<Map<String, dynamic>> _previewData = [];
+  List<String> _headers = [];
 
   Future<void> _pickDate(bool isStart) async {
     final colors = Theme.of(context).extension<AppThemeColors>()!;
@@ -48,18 +51,21 @@ class _ReportExportPageState extends State<ReportExportPage> {
     );
     if (date != null) {
       setState(() {
-        if (isStart)
+        if (isStart) {
           _startDate = date;
-        else
+        } else {
           _endDate = date;
+        }
       });
     }
   }
 
-  Future<void> _generateAndDownloadCsv() async {
+  // 1. CARGA LA DATA Y LA MUESTRA EN PANTALLA
+  Future<void> _fetchPreviewData() async {
     final colors = Theme.of(context).extension<AppThemeColors>()!;
     dynamic configRaw = widget.reportData['configuration'];
     Map<String, dynamic> configMap = {};
+
     if (configRaw is String) {
       try {
         configMap = jsonDecode(configRaw);
@@ -79,7 +85,7 @@ class _ReportExportPageState extends State<ReportExportPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            "La plantilla está corrupta. Edítela nuevamente.",
+            "La plantilla está incompleta. Edítela e intente nuevamente.",
             style: TextStyle(color: colors.text),
           ),
           backgroundColor: colors.warningColor,
@@ -88,7 +94,11 @@ class _ReportExportPageState extends State<ReportExportPage> {
       return;
     }
 
-    setState(() => _isGenerating = true);
+    setState(() {
+      _isLoading = true;
+      _previewData.clear();
+      _headers.clear();
+    });
 
     try {
       final payload = {
@@ -105,37 +115,71 @@ class _ReportExportPageState extends State<ReportExportPage> {
       final List<dynamic> data = (response is List) ? response : [];
 
       if (data.isEmpty) {
-        if (mounted)
+        if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                "No hay datos en este rango de fechas.",
+                "No se encontraron registros en el rango de fechas seleccionado.",
                 style: TextStyle(color: colors.text),
               ),
               backgroundColor: colors.warningColor,
             ),
           );
-        setState(() => _isGenerating = false);
+        }
         return;
       }
 
-      List<List<dynamic>> csvData = [];
-      final firstRow = data.first as Map<String, dynamic>;
-      csvData.add(firstRow.keys.map((k) => k.toUpperCase()).toList());
+      final firstRow = Map<String, dynamic>.from(data.first);
+      setState(() {
+        _headers = firstRow.keys.toList();
+        _previewData = data.map((e) => Map<String, dynamic>.from(e)).toList();
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              "Error cargando reporte: $e",
+              style: TextStyle(color: colors.text),
+            ),
+            backgroundColor: colors.errorColor,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
 
-      for (var row in data) {
-        if (row is Map<String, dynamic>) csvData.add(row.values.toList());
+  // 2. EXPORTA A CSV CON SELECTOR NATIVO DE CARPETA (saveAs)
+  Future<void> _exportToExcel() async {
+    final colors = Theme.of(context).extension<AppThemeColors>()!;
+    if (_previewData.isEmpty) {
+      await _fetchPreviewData();
+      if (_previewData.isEmpty) return;
+    }
+
+    try {
+      List<List<dynamic>> csvData = [];
+
+      // Fila de encabezados
+      csvData.add(_headers);
+
+      // Filas de contenido
+      for (var row in _previewData) {
+        csvData.add(row.values.toList());
       }
 
-      String csvContent = const ListToCsvConverter().convert(csvData);
-      List<int> bom = [0xEF, 0xBB, 0xBF];
+      String csvContent = const CsvEncoder().convert(csvData);
+      List<int> bom = [0xEF, 0xBB, 0xBF]; // Marca UTF-8 para Excel
       List<int> bytes = utf8.encode(csvContent);
       Uint8List finalBytes = Uint8List.fromList(bom + bytes);
 
       String fileName =
           "Reporte_${widget.reportData['name']}_${DateFormat('yyyyMMdd').format(DateTime.now())}";
 
-      await FileSaver.instance.saveFile(
+      // 🔥 saveAs ABRE LA VENTANA NATIVA DEL SISTEMA PARA ELEGIR LA CARPETA
+      await FileSaver.instance.saveAs(
         name: fileName,
         bytes: finalBytes,
         fileExtension: "csv",
@@ -143,47 +187,28 @@ class _ReportExportPageState extends State<ReportExportPage> {
       );
 
       if (mounted) {
-        showDialog(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            backgroundColor: colors.cardBackground,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-              side: BorderSide(color: colors.cardBorder),
-            ),
-            title: Row(
-              children: [
-                Icon(Icons.check_circle, color: colors.successColor),
-                const SizedBox(width: 10),
-                Text(
-                  "¡Descarga Exitosa!",
-                  style: TextStyle(color: colors.text),
-                ),
-              ],
-            ),
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
             content: Text(
-              "El archivo Excel (.csv) se ha guardado en tus descargas.",
-              style: TextStyle(color: colors.text.withValues(alpha: 0.8)),
+              "¡Reporte exportado correctamente!",
+              style: TextStyle(color: colors.text),
             ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: Text("Entendido", style: TextStyle(color: colors.text)),
-              ),
-            ],
+            backgroundColor: colors.successColor,
           ),
         );
       }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text("Error: $e", style: TextStyle(color: colors.text)),
+            content: Text(
+              "Error exportando: $e",
+              style: TextStyle(color: colors.text),
+            ),
             backgroundColor: colors.errorColor,
           ),
         );
-    } finally {
-      if (mounted) setState(() => _isGenerating = false);
+      }
     }
   }
 
@@ -192,108 +217,195 @@ class _ReportExportPageState extends State<ReportExportPage> {
     final colors = Theme.of(context).extension<AppThemeColors>()!;
 
     return MasterLayout(
-      title: "Exportar a Excel",
+      title: "Consola de Reportes",
       mode: PageMode.form,
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: colors.successColor.withValues(alpha: 0.1),
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: colors.successColor.withValues(alpha: 0.3),
-                  width: 2,
-                ),
+            // FILTROS SUPERIORES
+            Card(
+              color: colors.cardBackground,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: BorderSide(color: colors.cardBorder),
               ),
-              child: Icon(
-                Icons.table_view,
-                size: 60,
-                color: colors.successColor,
-              ),
-            ),
-            const SizedBox(height: 20),
-            Text(
-              widget.reportData['name'] ?? 'Reporte',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: colors.text,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 10),
-            Text(
-              "Filtre por fecha y genere su archivo de datos planos listos para Business Intelligence.",
-              textAlign: TextAlign.center,
-              style: TextStyle(color: colors.text.withValues(alpha: 0.6)),
-            ),
-            const SizedBox(height: 40),
-
-            Row(
-              children: [
-                Expanded(
-                  child: AppTextField(
-                    controller: TextEditingController(
-                      text: _startDate != null
-                          ? DateFormat('yyyy-MM-dd').format(_startDate!)
-                          : "Desde siempre",
+              child: Padding(
+                padding: const EdgeInsets.all(14.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      widget.reportData['name'] ?? 'Reporte',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: colors.text,
+                      ),
                     ),
-                    label: "Fecha Inicio",
-                    readOnly: true,
-                    onTap: () => _pickDate(true),
-                    prefixIcon: Icons.calendar_today,
-                  ),
-                ),
-                const SizedBox(width: 15),
-                Expanded(
-                  child: AppTextField(
-                    controller: TextEditingController(
-                      text: _endDate != null
-                          ? DateFormat('yyyy-MM-dd').format(_endDate!)
-                          : "Hasta hoy",
-                    ),
-                    label: "Fecha Fin",
-                    readOnly: true,
-                    onTap: () => _pickDate(false),
-                    prefixIcon: Icons.calendar_today,
-                  ),
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 30),
-
-            SizedBox(
-              width: double.infinity,
-              height: 55,
-              child: ElevatedButton.icon(
-                onPressed: _isGenerating ? null : _generateAndDownloadCsv,
-                icon: _isGenerating
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          color: Colors.white,
-                          strokeWidth: 2,
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: AppTextField(
+                            controller: TextEditingController(
+                              text: _startDate != null
+                                  ? DateFormat('yyyy-MM-dd').format(_startDate!)
+                                  : "Desde inicio",
+                            ),
+                            label: "Fecha Inicial",
+                            readOnly: true,
+                            onTap: () => _pickDate(true),
+                            prefixIcon: Icons.calendar_today,
+                          ),
                         ),
-                      )
-                    : const Icon(Icons.download, color: Colors.white),
-                label: Text(
-                  _isGenerating ? "Generando..." : "GENERAR CSV (EXCEL)",
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: colors.successColor,
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: AppTextField(
+                            controller: TextEditingController(
+                              text: _endDate != null
+                                  ? DateFormat('yyyy-MM-dd').format(_endDate!)
+                                  : "Hasta hoy",
+                            ),
+                            label: "Fecha Final",
+                            readOnly: true,
+                            onTap: () => _pickDate(false),
+                            prefixIcon: Icons.calendar_today,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: _isLoading ? null : _fetchPreviewData,
+                            icon: const Icon(Icons.search, size: 18),
+                            label: const Text("CONSULTAR"),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: colors.buttonBackground,
+                              foregroundColor: colors.buttonText,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: _isLoading ? null : _exportToExcel,
+                            icon: const Icon(Icons.download, size: 18),
+                            label: const Text("DESCARGAR EXCEL"),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: colors.successColor,
+                              foregroundColor: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
+            ),
+
+            const SizedBox(height: 16),
+
+            // VISOR DE TABLA DE DATOS
+            Expanded(
+              child: _isLoading
+                  ? Center(
+                      child: CircularProgressIndicator(
+                        color: colors.iconBackground,
+                      ),
+                    )
+                  : _previewData.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.table_chart_outlined,
+                            size: 60,
+                            color: colors.text.withValues(alpha: 0.3),
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            "Seleccione un rango de fechas y toque 'CONSULTAR' para previsualizar los datos.",
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: colors.text.withValues(alpha: 0.6),
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : Container(
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        color: colors.cardBackground,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: colors.cardBorder),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.all(12.0),
+                            child: Text(
+                              "Vista Previa de Registros (${_previewData.length}):",
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: colors.text,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                          Divider(color: colors.cardBorder, height: 1),
+                          Expanded(
+                            child: SingleChildScrollView(
+                              scrollDirection: Axis.vertical,
+                              child: SingleChildScrollView(
+                                scrollDirection: Axis.horizontal,
+                                child: DataTable(
+                                  headingRowColor: WidgetStateProperty.all(
+                                    colors.inputBackground,
+                                  ),
+                                  columns: _headers
+                                      .map(
+                                        (h) => DataColumn(
+                                          label: Text(
+                                            h,
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              color: colors.text,
+                                            ),
+                                          ),
+                                        ),
+                                      )
+                                      .toList(),
+                                  rows: _previewData.map((row) {
+                                    return DataRow(
+                                      cells: _headers.map((h) {
+                                        return DataCell(
+                                          Text(
+                                            row[h]?.toString() ?? '',
+                                            style: TextStyle(
+                                              color: colors.text,
+                                              fontSize: 13,
+                                            ),
+                                          ),
+                                        );
+                                      }).toList(),
+                                    );
+                                  }).toList(),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
             ),
           ],
         ),

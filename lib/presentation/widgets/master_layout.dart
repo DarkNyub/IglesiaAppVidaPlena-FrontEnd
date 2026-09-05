@@ -40,7 +40,7 @@ class MasterLayout extends StatefulWidget {
   final VoidCallback? onSave;
   final bool isSaving;
   final Widget? floatingActionButton;
-  final List<Widget>? actions; // <--- 1. AGREGAR ESTA LÍNEA
+  final List<Widget>? actions;
 
   const MasterLayout({
     super.key,
@@ -56,7 +56,7 @@ class MasterLayout extends StatefulWidget {
     this.onSave,
     this.isSaving = false,
     this.floatingActionButton,
-    this.actions, // <--- 2. AGREGAR ESTA LÍNEA AQUÍ TAMBIÉN
+    this.actions,
   });
 
   @override
@@ -132,7 +132,7 @@ class _MasterLayoutState extends State<MasterLayout> {
                   style: TextStyle(color: colors.text),
                 ),
                 value: _isAscending,
-                activeColor: colors.iconColor,
+                activeThumbColor: colors.iconColor,
                 activeTrackColor: colors.iconBackground,
                 onChanged: (val) => setModalState(() => _isAscending = val),
               ),
@@ -182,8 +182,7 @@ class _MasterLayoutState extends State<MasterLayout> {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AppThemeColors>()!;
-    List<Widget> appBarActions =
-        []; // Nota: le cambié el nombre a appBarActions temporalmente en tu mente, pero en tu código se llama "actions"
+    List<Widget> appBarActions = [];
 
     if (widget.mode == PageMode.list) {
       if (widget.enableSearch) {
@@ -367,7 +366,7 @@ class _MasterLayoutState extends State<MasterLayout> {
                   allowedRoles: const [
                     SystemRoles.superAdmin,
                     SystemRoles.admin,
-                  ], // 🚫 LIDER NO CREA EVENTOS
+                  ], // 🚫 LÍDER NO CREA EVENTOS
                   child: _drawerItem(
                     context,
                     Icons.event,
@@ -376,12 +375,15 @@ class _MasterLayoutState extends State<MasterLayout> {
                     colors,
                   ),
                 ),
+
+                // 🔥 PERMISO ACTUALIZADO: AHORA EL LÍDER PUEDE VER LA BITÁCORA DE SU RED
                 SystemRoleManager(
                   allowedRoles: const [
                     SystemRoles.superAdmin,
                     SystemRoles.admin,
+                    SystemRoles.lider,
                     SystemRoles.report,
-                  ], // 🚫 LIDER NO VE LA BITÁCORA GLOBAL
+                  ],
                   child: _drawerItem(
                     context,
                     Icons.assignment_turned_in,
@@ -390,6 +392,7 @@ class _MasterLayoutState extends State<MasterLayout> {
                     colors,
                   ),
                 ),
+
                 SystemRoleManager(
                   allowedRoles: const [
                     SystemRoles.superAdmin,

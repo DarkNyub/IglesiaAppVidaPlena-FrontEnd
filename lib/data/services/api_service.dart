@@ -150,9 +150,9 @@ class ApiService {
       String msg = 'Error ${response.statusCode}';
       try {
         final body = jsonDecode(utf8.decode(response.bodyBytes));
-        if (body['message'] != null)
+        if (body['message'] != null) {
           msg = body['message'];
-        else if (body['title'] != null)
+        } else if (body['title'] != null)
           msg = body['title'];
       } catch (e) {
         _checkConnectionError(e); // <--- AGREGAR ESTO

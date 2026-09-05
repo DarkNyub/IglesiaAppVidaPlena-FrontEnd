@@ -166,18 +166,21 @@ class _EventListPageState extends State<EventListPage> {
     final endType = item['endType'] ?? 'NEVER';
 
     String baseStr = "";
-    if (type == 'DAILY')
+    if (type == 'DAILY') {
       baseStr = interval == 1 ? "Diario" : "Cada $interval días";
+    }
     if (type == 'WEEKLY') {
       String days = _decodeRecurringDays(item['recurringDays']);
       baseStr = interval == 1
           ? "Semanal ($days)"
           : "Cada $interval sem ($days)";
     }
-    if (type == 'MONTHLY')
+    if (type == 'MONTHLY') {
       baseStr = interval == 1 ? "Mensual" : "Cada $interval meses";
-    if (type == 'ANNUALLY')
+    }
+    if (type == 'ANNUALLY') {
       baseStr = interval == 1 ? "Anual" : "Cada $interval años";
+    }
 
     if (endType == 'UNTIL_DATE' && item['endDate'] != null) {
       final dt = DateTime.tryParse(item['endDate']);
@@ -386,10 +389,12 @@ class _EventListPageState extends State<EventListPage> {
                                           ),
                                         ),
                                         onSelected: (val) {
-                                          if (val == 'edit')
+                                          if (val == 'edit') {
                                             _navigateToForm(item);
-                                          if (val == 'toggle')
+                                          }
+                                          if (val == 'toggle') {
                                             _toggleDeleteStatus(item);
+                                          }
                                         },
                                         itemBuilder: (ctx) => [
                                           if (!isDeleted)
