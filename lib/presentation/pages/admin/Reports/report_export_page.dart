@@ -9,6 +9,7 @@ import '../../../../core/constants/api_constants.dart';
 import '../../../widgets/master_layout.dart';
 import '../../../../core/app_theme_colors.dart';
 import '../../../widgets/ui_components/app_inputs.dart';
+import '../../../widgets/ui_components/organization_structure_selector.dart';
 
 class ReportExportPage extends StatefulWidget {
   final Map<String, dynamic> reportData;
@@ -23,10 +24,31 @@ class _ReportExportPageState extends State<ReportExportPage> {
 
   DateTime? _startDate;
   DateTime? _endDate;
+  int? _selectedStructureId;
 
+  List<dynamic> _structures = [];
   bool _isLoading = false;
   List<Map<String, dynamic>> _previewData = [];
   List<String> _headers = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadStructures();
+  }
+
+  Future<void> _loadStructures() async {
+    try {
+      final res = await _api.get(ApiConstants.organizationStructures);
+      if (mounted) {
+        setState(() {
+          _structures = (res is List)
+              ? res.where((e) => e['isDeleted'] != true).toList()
+              : [];
+        });
+      }
+    } catch (_) {}
+  }
 
   Future<void> _pickDate(bool isStart) async {
     final colors = Theme.of(context).extension<AppThemeColors>()!;
@@ -60,7 +82,6 @@ class _ReportExportPageState extends State<ReportExportPage> {
     }
   }
 
-  // 1. CARGA LA DATA Y LA MUESTRA EN PANTALLA
   Future<void> _fetchPreviewData() async {
     final colors = Theme.of(context).extension<AppThemeColors>()!;
     dynamic configRaw = widget.reportData['configuration'];
@@ -105,6 +126,7 @@ class _ReportExportPageState extends State<ReportExportPage> {
         "recordTypeId": recordTypeId,
         "startDate": _startDate?.toIso8601String(),
         "endDate": _endDate?.toIso8601String(),
+        "structureId": _selectedStructureId,
         "selectedColumns": selectedColumns,
       };
 
@@ -119,7 +141,7 @@ class _ReportExportPageState extends State<ReportExportPage> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                "No se encontraron registros en el rango de fechas seleccionado.",
+                "No se encontraron registros para los filtros seleccionados.",
                 style: TextStyle(color: colors.text),
               ),
               backgroundColor: colors.warningColor,
@@ -151,7 +173,33 @@ class _ReportExportPageState extends State<ReportExportPage> {
     }
   }
 
-  // 2. EXPORTA A CSV CON SELECTOR NATIVO DE CARPETA (saveAs)
+  // 🔥 FORMATEADOR INTELIGENTE DE NÚMEROS PARA LA UI
+  String _formatUIValue(dynamic rawValue, bool isStringColumn) {
+    if (rawValue == null || rawValue.toString().isEmpty) return '';
+    if (isStringColumn) return rawValue.toString();
+
+    // Intentamos procesar el valor como número
+    num? numberVal;
+    if (rawValue is num) {
+      numberVal = rawValue;
+    } else if (rawValue is String) {
+      numberVal = num.tryParse(rawValue);
+    }
+
+    if (numberVal != null) {
+      // Detección: ¿Es entero o tiene fracciones?
+      if (numberVal == numberVal.truncateToDouble()) {
+        // Es INT (ej. 1500) -> 1.500
+        return NumberFormat('#,##0', 'es_CO').format(numberVal);
+      } else {
+        // Es DECIMAL (ej. 1500.5) -> 1.500,50
+        return NumberFormat('#,##0.00', 'es_CO').format(numberVal);
+      }
+    }
+
+    return rawValue.toString();
+  }
+
   Future<void> _exportToExcel() async {
     final colors = Theme.of(context).extension<AppThemeColors>()!;
     if (_previewData.isEmpty) {
@@ -161,24 +209,38 @@ class _ReportExportPageState extends State<ReportExportPage> {
 
     try {
       List<List<dynamic>> csvData = [];
-
-      // Fila de encabezados
       csvData.add(_headers);
 
-      // Filas de contenido
       for (var row in _previewData) {
-        csvData.add(row.values.toList());
+        List<dynamic> csvRow = [];
+        for (var h in _headers) {
+          final rawValue = row[h];
+
+          // Detectamos si es número para mandarlo crudo (y que Excel pueda sumarlo)
+          num? numberVal;
+          if (rawValue is num) {
+            numberVal = rawValue;
+          } else if (rawValue is String) {
+            numberVal = num.tryParse(rawValue);
+          }
+
+          if (numberVal != null && h != 'Semana') {
+            csvRow.add(numberVal); // Mandamos número puro al CSV
+          } else {
+            csvRow.add(rawValue?.toString() ?? '');
+          }
+        }
+        csvData.add(csvRow);
       }
 
       String csvContent = const CsvEncoder().convert(csvData);
-      List<int> bom = [0xEF, 0xBB, 0xBF]; // Marca UTF-8 para Excel
+      List<int> bom = [0xEF, 0xBB, 0xBF];
       List<int> bytes = utf8.encode(csvContent);
       Uint8List finalBytes = Uint8List.fromList(bom + bytes);
 
       String fileName =
           "Reporte_${widget.reportData['name']}_${DateFormat('yyyyMMdd').format(DateTime.now())}";
 
-      // 🔥 saveAs ABRE LA VENTANA NATIVA DEL SISTEMA PARA ELEGIR LA CARPETA
       await FileSaver.instance.saveAs(
         name: fileName,
         bytes: finalBytes,
@@ -224,7 +286,6 @@ class _ReportExportPageState extends State<ReportExportPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // FILTROS SUPERIORES
             Card(
               color: colors.cardBackground,
               shape: RoundedRectangleBorder(
@@ -245,6 +306,18 @@ class _ReportExportPageState extends State<ReportExportPage> {
                       ),
                     ),
                     const SizedBox(height: 12),
+
+                    OrganizationStructureSelector(
+                      value: _selectedStructureId,
+                      structures: _structures,
+                      label: "Filtrar por Red / Ministerio",
+                      allowNull: true,
+                      nullLabel: "(Todas las Estructuras)",
+                      onChanged: (val) =>
+                          setState(() => _selectedStructureId = val),
+                    ),
+                    const SizedBox(height: 10),
+
                     Row(
                       children: [
                         Expanded(
@@ -311,7 +384,7 @@ class _ReportExportPageState extends State<ReportExportPage> {
 
             const SizedBox(height: 16),
 
-            // VISOR DE TABLA DE DATOS
+            // VISOR DE TABLA DE DATOS MATRICIAL
             Expanded(
               child: _isLoading
                   ? Center(
@@ -331,7 +404,7 @@ class _ReportExportPageState extends State<ReportExportPage> {
                           ),
                           const SizedBox(height: 12),
                           Text(
-                            "Seleccione un rango de fechas y toque 'CONSULTAR' para previsualizar los datos.",
+                            "Seleccione filtros y presione 'CONSULTAR' para generar la matriz semanal.",
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               color: colors.text.withValues(alpha: 0.6),
@@ -353,7 +426,7 @@ class _ReportExportPageState extends State<ReportExportPage> {
                           Padding(
                             padding: const EdgeInsets.all(12.0),
                             child: Text(
-                              "Vista Previa de Registros (${_previewData.length}):",
+                              "Matriz Semanal de Registros (${_previewData.length - 1} filas + Totales):",
                               style: TextStyle(
                                 fontWeight: FontWeight.bold,
                                 color: colors.text,
@@ -385,14 +458,61 @@ class _ReportExportPageState extends State<ReportExportPage> {
                                       )
                                       .toList(),
                                   rows: _previewData.map((row) {
+                                    // 🔥 DETECTAMOS FILAS DE SUBTOTALES PARA PONERLAS EN NEGRITA
+                                    final rowTitle =
+                                        row['Semana']
+                                            ?.toString()
+                                            .toUpperCase() ??
+                                        '';
+                                    final isSubtotal = rowTitle.startsWith(
+                                      'SUBTOTAL',
+                                    );
+                                    final isGrandTotal = rowTitle.startsWith(
+                                      'TOTAL GENERAL',
+                                    );
+                                    final isHighlightRow =
+                                        isSubtotal || isGrandTotal;
+
                                     return DataRow(
+                                      color: isGrandTotal
+                                          ? WidgetStateProperty.all(
+                                              colors.iconBackground.withValues(
+                                                alpha: 0.25,
+                                              ),
+                                            )
+                                          : isSubtotal
+                                          ? WidgetStateProperty.all(
+                                              colors.iconBackground.withValues(
+                                                alpha: 0.1,
+                                              ),
+                                            )
+                                          : null,
                                       cells: _headers.map((h) {
+                                        // Evaluamos si formatear con miles/decimales (ignoramos columnas de texto)
+                                        final isStringColumn =
+                                            (h == 'Semana' ||
+                                            h == 'Fecha de Registro' ||
+                                            h == 'Evento' ||
+                                            h == 'Red / Estructura' ||
+                                            h == 'Líder Responsable');
+                                        final displayValue = _formatUIValue(
+                                          row[h],
+                                          isStringColumn,
+                                        );
+
                                         return DataCell(
                                           Text(
-                                            row[h]?.toString() ?? '',
+                                            displayValue,
                                             style: TextStyle(
-                                              color: colors.text,
-                                              fontSize: 13,
+                                              color: isHighlightRow
+                                                  ? colors.text
+                                                  : colors.text.withValues(
+                                                      alpha: 0.9,
+                                                    ),
+                                              fontWeight: isHighlightRow
+                                                  ? FontWeight.bold
+                                                  : FontWeight.normal,
+                                              fontSize: isGrandTotal ? 14 : 13,
                                             ),
                                           ),
                                         );
