@@ -180,7 +180,7 @@ class _ReportListPageState extends State<ReportListPage> {
     final colors = Theme.of(context).extension<AppThemeColors>()!;
 
     return MasterLayout(
-      title: "Reportes (Excel)",
+      title: "Reportes Disponibles",
       mode: PageMode.list,
       enableSearch: true,
       onSearch: (q) {

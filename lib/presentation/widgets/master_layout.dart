@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:iglesia_app/presentation/pages/settings_page.dart';
+import '../pages/settings_page.dart';
 import '../../core/user_session.dart';
 import '../../core/system_role_manager.dart';
 import '../../data/services/auth_service.dart';
@@ -289,6 +289,9 @@ class _MasterLayoutState extends State<MasterLayout> {
     final username = session.currentUser?.username ?? 'Usuario';
     final role = session.role ?? 'Invitado';
     final authService = AuthService();
+    final String fullName =
+        "${session.currentUser?.FirstName ?? ''} ${session.currentUser?.LastName ?? ''}";
+    final String? photoUrl = session.currentUser?.photoUrl;
 
     return Drawer(
       backgroundColor: colors.cardBackground,
@@ -296,7 +299,7 @@ class _MasterLayoutState extends State<MasterLayout> {
         children: [
           UserAccountsDrawerHeader(
             accountName: Text(
-              username,
+              fullName,
               style: TextStyle(
                 color: colors.iconColor,
                 fontWeight: FontWeight.bold,
@@ -306,16 +309,32 @@ class _MasterLayoutState extends State<MasterLayout> {
               "Rol: $role",
               style: TextStyle(color: colors.iconColor.withValues(alpha: 0.8)),
             ),
-            currentAccountPicture: CircleAvatar(
-              backgroundColor: colors.iconColor,
-              child: Text(
-                username.isNotEmpty ? username[0].toUpperCase() : "U",
-                style: TextStyle(
-                  fontSize: 24,
-                  color: colors.iconBackground,
-                  fontWeight: FontWeight.bold,
-                ),
+            currentAccountPicture: Container(
+              decoration: BoxDecoration(
+                color: colors.iconColor,
+                shape: BoxShape.circle,
+                border: Border.all(color: colors.iconBackground, width: 2),
+                // 🔥 Inyectamos la foto si existe
+                image: (photoUrl != null && photoUrl.isNotEmpty)
+                    ? DecorationImage(
+                        image: NetworkImage(photoUrl),
+                        fit: BoxFit.cover,
+                      )
+                    : null,
               ),
+              // Si no hay foto, mostramos la inicial del nombre real
+              child: (photoUrl == null || photoUrl.isEmpty)
+                  ? Center(
+                      child: Text(
+                        fullName.isNotEmpty ? fullName[0].toUpperCase() : "U",
+                        style: TextStyle(
+                          fontSize: 24,
+                          color: colors.iconBackground,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    )
+                  : null,
             ),
             decoration: BoxDecoration(color: colors.iconBackground),
           ),

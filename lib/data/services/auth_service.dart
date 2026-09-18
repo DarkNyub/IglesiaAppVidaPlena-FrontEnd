@@ -24,6 +24,12 @@ class AuthService {
       await _storage.write(key: 'systemRole', value: user.systemRole);
       await _storage.write(key: 'username', value: user.username);
       await _storage.write(key: 'userId', value: user.id.toString());
+      await _storage.write(key: 'FirstName', value: user.FirstName);
+      await _storage.write(key: 'LastName', value: user.LastName);
+      await _storage.write(
+        key: 'photoUrl',
+        value: user.photoUrl ?? '../assets/images/logo.png',
+      );
 
       // 2. GUARDAR EN MEMORIA (Tu idea)
       UserSession().setSession(user);
@@ -49,6 +55,9 @@ class AuthService {
     final username = await _storage.read(key: 'username');
     final userId = await _storage.read(key: 'userId');
     final memberId = await _storage.read(key: 'memberId');
+    final firstName = await _storage.read(key: 'FirstName');
+    final lastName = await _storage.read(key: 'LastName');
+    final photoUrl = await _storage.read(key: 'photoUrl');
 
     if (role != null && username != null) {
       final user = User(
@@ -60,6 +69,9 @@ class AuthService {
         expiresAt: DateTime.now().add(
           const Duration(hours: 12),
         ), // O ajusta según tu token
+        FirstName: firstName ?? '',
+        LastName: lastName ?? '',
+        photoUrl: photoUrl ?? '../assets/images/logo.png',
       );
       UserSession().setSession(user);
       return true;

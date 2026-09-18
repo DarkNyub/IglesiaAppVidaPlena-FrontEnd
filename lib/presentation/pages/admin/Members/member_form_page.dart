@@ -1,6 +1,10 @@
-// ... [MANTÉN TUS IMPORTS Y LA CLASE STATEFUL WIDGET IGUAL] ...
+import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:image_cropper/image_cropper.dart';
+
 import '../../../../data/services/api_service.dart';
 import '../../../../core/constants/api_constants.dart';
 import '../../../../data/repositories/generic_repository.dart';
@@ -19,7 +23,6 @@ class MemberFormPage extends StatefulWidget {
 }
 
 class _MemberFormPageState extends State<MemberFormPage> {
-  // ... [MANTÉN TUS VARIABLES IGUAL HASTA EL MÉTODO _loadCatalogsAndData] ...
   final _api = ApiService();
   final _formKey = GlobalKey<FormState>();
 
@@ -47,6 +50,11 @@ class _MemberFormPageState extends State<MemberFormPage> {
   String? _lastModifiedDate;
   bool _isDeleted = false;
 
+  // 🔥 VARIABLES PARA LA FOTO
+  File? _imageFile;
+  String? _photoBase64;
+  String? _currentPhotoUrl;
+
   @override
   void initState() {
     super.initState();
@@ -62,7 +70,6 @@ class _MemberFormPageState extends State<MemberFormPage> {
 
       if (mounted) {
         setState(() {
-          // --- 🧟‍♂️ FILTRO ANTI-ZOMBIES APLICADO (Solo para asignar NUEVOS roles) ---
           _structures = (responses[0] is List)
               ? (responses[0] as List)
                     .where((e) => e['isDeleted'] != true)
@@ -91,7 +98,6 @@ class _MemberFormPageState extends State<MemberFormPage> {
     }
   }
 
-  // ... [COPIA AQUÍ EL RESTO DEL ARCHIVO member_form_page.dart EXACTAMENTE COMO ESTABA DESDE _populateData HACIA ABAJO] ...
   void _populateData(Map<String, dynamic> e) {
     _fnameCtrl.text = e['firstName'] ?? '';
     _lnameCtrl.text = e['lastName'] ?? '';
@@ -100,6 +106,7 @@ class _MemberFormPageState extends State<MemberFormPage> {
     _phoneCtrl.text = e['phone'] ?? '';
     _addressCtrl.text = e['address'] ?? '';
     _isDeleted = e['isDeleted'] ?? false;
+    _currentPhotoUrl = e['photoUrl']; // 🔥 RECUPERAMOS LA URL SI EXISTE
 
     if (e['birthDate'] != null &&
         !e['birthDate'].toString().startsWith("0001")) {
@@ -152,6 +159,52 @@ class _MemberFormPageState extends State<MemberFormPage> {
         backgroundColor: isError ? colors.errorColor : colors.successColor,
       ),
     );
+  }
+
+  // 🔥 LÓGICA DE SELECCIÓN Y RECORTE DE IMAGEN
+  Future<void> _pickAndCropImage() async {
+    final colors = Theme.of(context).extension<AppThemeColors>()!;
+    final picker = ImagePicker();
+
+    try {
+      final XFile? pickedFile = await picker.pickImage(
+        source: ImageSource.gallery,
+      );
+
+      if (pickedFile != null) {
+        final CroppedFile? croppedFile = await ImageCropper().cropImage(
+          sourcePath: pickedFile.path,
+          compressQuality: 70, // Calidad del 70% para mantenerlo bajo 1MB
+          uiSettings: [
+            AndroidUiSettings(
+              toolbarTitle: 'Encuadrar Foto',
+              toolbarColor: colors.cardBackground,
+              toolbarWidgetColor: colors.text,
+              initAspectRatio: CropAspectRatioPreset.square,
+              lockAspectRatio: true, // Obliga a que sea cuadrado 1:1
+              hideBottomControls: true,
+            ),
+            IOSUiSettings(
+              title: 'Encuadrar Foto',
+              aspectRatioLockEnabled: true,
+              resetAspectRatioEnabled: false,
+            ),
+          ],
+        );
+
+        if (croppedFile != null) {
+          final file = File(croppedFile.path);
+          final bytes = await file.readAsBytes();
+
+          setState(() {
+            _imageFile = file;
+            _photoBase64 = base64Encode(bytes); // Listo para irse a GitHub
+          });
+        }
+      }
+    } catch (e) {
+      _showSnackbar("Error al procesar la imagen: $e", isError: true);
+    }
   }
 
   Future<void> _pickDate() async {
@@ -294,6 +347,11 @@ class _MemberFormPageState extends State<MemberFormPage> {
           .toList(),
     };
 
+    // 🔥 INYECTAMOS EL BASE64 SI EL USUARIO SELECCIONÓ UNA FOTO NUEVA
+    if (_photoBase64 != null) {
+      payload['photoBase64'] = _photoBase64;
+    }
+
     try {
       if (widget.existingMember == null) {
         await _api.post(ApiConstants.members, payload);
@@ -355,6 +413,79 @@ class _MemberFormPageState extends State<MemberFormPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // 🔥 SECCIÓN DE FOTO DE PERFIL
+                    Center(
+                      child: Stack(
+                        children: [
+                          GestureDetector(
+                            onTap: _pickAndCropImage,
+                            child: Container(
+                              width: 120,
+                              height: 120,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: colors.iconBackground.withValues(
+                                  alpha: 0.1,
+                                ),
+                                border: Border.all(
+                                  color: colors.iconBorder,
+                                  width: 2,
+                                ),
+                                image: _imageFile != null
+                                    ? DecorationImage(
+                                        image: FileImage(_imageFile!),
+                                        fit: BoxFit.cover,
+                                      )
+                                    : (_currentPhotoUrl != null &&
+                                          _currentPhotoUrl!.isNotEmpty)
+                                    ? DecorationImage(
+                                        image: NetworkImage(_currentPhotoUrl!),
+                                        fit: BoxFit.cover,
+                                      )
+                                    : null,
+                              ),
+                              child:
+                                  (_imageFile == null &&
+                                      (_currentPhotoUrl == null ||
+                                          _currentPhotoUrl!.isEmpty))
+                                  ? Icon(
+                                      Icons.person,
+                                      size: 60,
+                                      color: colors.iconBackground.withValues(
+                                        alpha: 0.5,
+                                      ),
+                                    )
+                                  : null,
+                            ),
+                          ),
+                          Positioned(
+                            bottom: 0,
+                            right: 0,
+                            child: GestureDetector(
+                              onTap: _pickAndCropImage,
+                              child: Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: colors.iconBackground,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: colors.cardBackground,
+                                    width: 2,
+                                  ),
+                                ),
+                                child: Icon(
+                                  Icons.camera_alt,
+                                  size: 18,
+                                  color: colors.iconColor,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 30),
+
                     if (_linkedUserObj != null)
                       Container(
                         margin: const EdgeInsets.only(bottom: 20),
@@ -487,7 +618,6 @@ class _MemberFormPageState extends State<MemberFormPage> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text("Roles y Cargos", style: sectionTitleStyle),
-                        // Botón (+) discreto
                         InkWell(
                           onTap: _showAddRoleDialog,
                           borderRadius: BorderRadius.circular(20),
@@ -570,7 +700,7 @@ class _MemberFormPageState extends State<MemberFormPage> {
                                 Icons.close,
                                 color: colors.iconColor,
                                 size: 12,
-                              ), // Ícono (X) discreto
+                              ),
                             ),
                           ),
                         ),
@@ -586,7 +716,6 @@ class _MemberFormPageState extends State<MemberFormPage> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text("Datos Extra", style: sectionTitleStyle),
-                        // Botón (+) discreto
                         InkWell(
                           onTap: _addExtraDataField,
                           borderRadius: BorderRadius.circular(20),
@@ -691,7 +820,6 @@ class _MemberFormPageState extends State<MemberFormPage> {
                                 onChanged: (v) => entry.value['value'] = v,
                               ),
                             ),
-                            // Botón (X) discreto
                             Container(
                               margin: const EdgeInsets.only(left: 8),
                               child: InkWell(

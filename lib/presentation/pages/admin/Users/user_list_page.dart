@@ -360,17 +360,37 @@ class _UserListPageState extends State<UserListPage> {
                         Column(
                           children: [
                             Container(
-                              padding: const EdgeInsets.all(12),
+                              width: 48,
+                              height: 48,
                               decoration: BoxDecoration(
                                 color: colors.iconBackground,
                                 shape: BoxShape.circle,
-                                border: Border.all(color: colors.iconBorder),
+                                border: Border.all(
+                                  color: colors.iconBorder,
+                                  width: 1.5,
+                                ),
+                                image:
+                                    (item['memberPhotoUrl'] != null &&
+                                        item['memberPhotoUrl']
+                                            .toString()
+                                            .isNotEmpty)
+                                    ? DecorationImage(
+                                        image: NetworkImage(
+                                          item['memberPhotoUrl'],
+                                        ),
+                                        fit: BoxFit.cover,
+                                      )
+                                    : null,
                               ),
-                              child: Icon(
-                                statusIcon,
-                                size: 16,
-                                color: colors.iconColor,
-                              ),
+                              child:
+                                  (item['memberPhotoUrl'] == null ||
+                                      item['memberPhotoUrl'].toString().isEmpty)
+                                  ? Icon(
+                                      statusIcon,
+                                      size: 20,
+                                      color: colors.iconColor,
+                                    )
+                                  : null,
                             ),
                             const SizedBox(height: 8),
                             Container(

@@ -6,6 +6,9 @@ class User {
   final String token;
   final DateTime expiresAt;
   Map<String, dynamic>? extraData; // <--- Nuevo: Para traer el diseño de la BD
+  final String FirstName;
+  final String LastName;
+  final String? photoUrl;
 
   User({
     required this.id,
@@ -15,6 +18,9 @@ class User {
     required this.token,
     required this.expiresAt,
     this.extraData,
+    required this.FirstName,
+    required this.LastName,
+    this.photoUrl,
   });
 
   factory User.fromJson(Map<String, dynamic> json) {
@@ -28,6 +34,9 @@ class User {
           ? DateTime.parse(json['expiresAt'])
           : DateTime.now().add(const Duration(hours: 12)),
       extraData: json['extraData'], // <--- Mapeamos el campo JSONB
+      FirstName: json['FirstName'] ?? '',
+      LastName: json['LastName'] ?? '',
+      photoUrl: json['photoUrl'],
     );
   }
 
@@ -40,6 +49,9 @@ class User {
       'token': token,
       'expiresAt': expiresAt.toIso8601String(),
       'extraData': extraData,
+      'FirstName': FirstName,
+      'LastName': LastName,
+      'photoUrl': photoUrl,
     };
   }
 }

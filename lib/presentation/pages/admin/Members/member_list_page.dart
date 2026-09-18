@@ -1,8 +1,11 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:excel/excel.dart' hide Border;
+import 'package:csv/csv.dart'; // 🔥 LIBRERÍA AGREGADA PARA EXPORTAR
 import 'dart:typed_data';
+import 'package:file_saver/file_saver.dart'; // 🔥 LIBRERÍA AGREGADA PARA GUARDAR
 import '../../../../core/constants/api_constants.dart';
 import '../../../../data/repositories/generic_repository.dart';
 import '../../../widgets/master_layout.dart';
@@ -30,11 +33,29 @@ class _MemberListPageState extends State<MemberListPage> {
   String _currentQuery = '';
   String _sortBy = 'name';
   bool _ascending = true;
+  bool _showSensitiveData = false;
 
   @override
   void initState() {
     super.initState();
     _loadData();
+  }
+
+  String _maskData(String data, String type) {
+    if (_showSensitiveData || data.isEmpty || data.contains('Sin '))
+      return data;
+
+    if (type == 'email') {
+      final parts = data.split('@');
+      if (parts.length != 2) return "***";
+      return "${parts[0].substring(0, 1)}***@${parts[1]}";
+    }
+
+    // Para teléfonos y documentos: Mostrar solo los últimos 4 dígitos
+    if (data.length > 4) {
+      return "***-***-${data.substring(data.length - 4)}";
+    }
+    return "***";
   }
 
   Future<void> _loadData() async {
@@ -370,7 +391,6 @@ class _MemberListPageState extends State<MemberListPage> {
           continue;
         }
 
-        // Parseo seguro de números (IDs)
         int? structureId;
         int? roleId;
         if (row.length > 6 && row[6]?.value != null) {
@@ -431,6 +451,89 @@ class _MemberListPageState extends State<MemberListPage> {
     }
   }
 
+  // ==========================================
+  // EXPORTAR DIRECTORIO MASIVO (EXCEL/CSV)
+  // ==========================================
+  Future<void> _exportToExcel() async {
+    if (_filteredItems.isEmpty) {
+      _showSnackbar("No hay miembros para exportar.", isWarning: true);
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      List<List<dynamic>> csvData = [];
+
+      // Encabezados
+      csvData.add([
+        "ID",
+        "Nombres",
+        "Apellidos",
+        "Cédula",
+        "Teléfono",
+        "Email",
+        "Dirección",
+        "Estado",
+        "Cargos y Roles",
+      ]);
+
+      for (var item in _filteredItems) {
+        // 🔥 FORMATEO ESTRUCTURADO DE ROLES Y CARGOS
+        // Ejemplo original que envía el backend: ["Líder - Red Jóvenes", "Facilitador - Grupo X"]
+        // Lo transformamos a: "Red Jóvenes : Líder ; Grupo X : Facilitador"
+        final rolesList = item['rolesSummary'] as List<dynamic>? ?? [];
+
+        final String rolesFormatted = rolesList
+            .map((r) {
+              String rawStr = r.toString();
+              // Aseguramos que se separe el nombre de la red y el cargo por dos puntos ( : )
+              // Si tu backend usa " - " o " en " para separar, esto lo normaliza visualmente
+              return rawStr.replaceAll(' - ', ' : ').replaceAll(' en ', ' : ');
+            })
+            .join(
+              " ; ",
+            ); // Separamos cada combinación (Red:Cargo) con punto y coma ( ; )
+
+        csvData.add([
+          item['id'] ?? '',
+          item['firstName'] ?? '',
+          item['lastName'] ?? '',
+          item['document'] ?? '',
+          item['phone'] ?? '',
+          item['email'] ?? '',
+          item['address'] ?? '',
+          (item['isDeleted'] == true) ? 'INACTIVO' : 'ACTIVO',
+          rolesFormatted,
+        ]);
+      }
+
+      // Convertimos a CSV plano
+      String csvContent = const CsvEncoder().convert(csvData);
+      // Marcador BOM UTF-8 para que Excel lea los acentos y las ñ correctamente
+      List<int> bom = [0xEF, 0xBB, 0xBF];
+      List<int> bytes = utf8.encode(csvContent);
+      Uint8List finalBytes = Uint8List.fromList(bom + bytes);
+
+      String fileName =
+          "Directorio_Miembros_${DateTime.now().millisecondsSinceEpoch}";
+
+      // 🔥 Selector nativo para guardar en el dispositivo
+      await FileSaver.instance.saveAs(
+        name: fileName,
+        bytes: finalBytes,
+        fileExtension: "csv",
+        mimeType: MimeType.csv,
+      );
+
+      _showSnackbar("Directorio exportado exitosamente.");
+    } catch (e) {
+      _showSnackbar("Error al exportar: $e", isError: true);
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final normalizedRole = SystemRoles.normalize(_session.role);
@@ -460,11 +563,18 @@ class _MemberListPageState extends State<MemberListPage> {
       },
       onAdd: () => _navigateToForm(),
 
-      // 🔥 AGREGAMOS EL BOTÓN EXTRA AQUÍ AL MASTER LAYOUT
+      // 🔥 BOTONES EN LA BARRA SUPERIOR
       actions: [
+        // Botón de DESCARGA masiva (Visible para cualquiera que tenga acceso a la lista)
+        IconButton(
+          icon: Icon(Icons.download, color: colors.text),
+          tooltip: "Exportar Directorio (Excel/CSV)",
+          onPressed: _isLoading ? null : _exportToExcel,
+        ),
+        // Botón de CARGA masiva (Solo Admin/SuperAdmin)
         if (canManageStatus)
           IconButton(
-            icon: Icon(Icons.file_upload, color: colors.text),
+            icon: Icon(Icons.upload_file, color: colors.text),
             tooltip: "Carga Masiva (Excel)",
             onPressed: _isLoading ? null : _showExcelHelpDialog,
           ),
@@ -675,52 +785,25 @@ class _MemberCardItem extends StatelessWidget {
                           ],
                         ),
                       ),
-                      SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: PopupMenuButton<String>(
-                          color: colors.cardBackground,
-                          padding: EdgeInsets.zero,
-                          icon: Icon(
-                            Icons.more_vert,
-                            size: 20,
-                            color: colors.text.withValues(alpha: 0.7),
-                          ),
-                          onSelected: (val) {
-                            if (val == 'edit') onEdit();
-                            if (val == 'toggle') onToggle();
-                          },
-                          itemBuilder: (ctx) => [
-                            PopupMenuItem(
-                              value: 'edit',
-                              child: Row(
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.all(4),
-                                    decoration: BoxDecoration(
-                                      color: colors.iconBackground,
-                                      shape: BoxShape.circle,
-                                      border: Border.all(
-                                        color: colors.iconBorder,
-                                      ),
-                                    ),
-                                    child: Icon(
-                                      Icons.edit,
-                                      size: 14,
-                                      color: colors.iconColor,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    "Editar",
-                                    style: TextStyle(color: colors.text),
-                                  ),
-                                ],
-                              ),
+                      if (canManageStatus)
+                        SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: PopupMenuButton<String>(
+                            color: colors.cardBackground,
+                            padding: EdgeInsets.zero,
+                            icon: Icon(
+                              Icons.more_vert,
+                              size: 20,
+                              color: colors.text.withValues(alpha: 0.7),
                             ),
-                            if (canManageStatus)
+                            onSelected: (val) {
+                              if (val == 'edit') onEdit();
+                              if (val == 'toggle') onToggle();
+                            },
+                            itemBuilder: (ctx) => [
                               PopupMenuItem(
-                                value: 'toggle',
+                                value: 'edit',
                                 child: Row(
                                   children: [
                                     Container(
@@ -733,24 +816,52 @@ class _MemberCardItem extends StatelessWidget {
                                         ),
                                       ),
                                       child: Icon(
-                                        isActive
-                                            ? Icons.person_off
-                                            : Icons.person_add,
+                                        Icons.edit,
                                         size: 14,
                                         color: colors.iconColor,
                                       ),
                                     ),
                                     const SizedBox(width: 8),
                                     Text(
-                                      isActive ? "Dar de Baja" : "Activar",
+                                      "Editar",
                                       style: TextStyle(color: colors.text),
                                     ),
                                   ],
                                 ),
                               ),
-                          ],
+                              if (canManageStatus)
+                                PopupMenuItem(
+                                  value: 'toggle',
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(4),
+                                        decoration: BoxDecoration(
+                                          color: colors.iconBackground,
+                                          shape: BoxShape.circle,
+                                          border: Border.all(
+                                            color: colors.iconBorder,
+                                          ),
+                                        ),
+                                        child: Icon(
+                                          isActive
+                                              ? Icons.person_off
+                                              : Icons.person_add,
+                                          size: 14,
+                                          color: colors.iconColor,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        isActive ? "Dar de Baja" : "Activar",
+                                        style: TextStyle(color: colors.text),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                            ],
+                          ),
                         ),
-                      ),
                     ],
                   ),
                   const SizedBox(height: 6),

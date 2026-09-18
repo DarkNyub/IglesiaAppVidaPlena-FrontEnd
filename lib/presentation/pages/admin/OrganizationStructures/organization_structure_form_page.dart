@@ -1,4 +1,9 @@
+import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:image_cropper/image_cropper.dart';
+
 import '../../../../data/services/api_service.dart';
 import '../../../../core/constants/api_constants.dart';
 import '../../../widgets/master_layout.dart';
@@ -31,6 +36,11 @@ class _OrganizationStructureFormPageState
   bool _isLoadingInitial = true;
   bool _isSaving = false;
 
+  // 🔥 VARIABLES PARA LA FOTO
+  File? _imageFile;
+  String? _photoBase64;
+  String? _currentPhotoUrl;
+
   @override
   void initState() {
     super.initState();
@@ -46,7 +56,6 @@ class _OrganizationStructureFormPageState
 
       if (mounted) {
         setState(() {
-          // --- 🧟‍♂️ FILTRO ANTI-ZOMBIES APLICADO ---
           final currentType =
               widget.existingStructure?['organizationTypeId'] ??
               widget.existingStructure?['organization_type_id'];
@@ -73,7 +82,6 @@ class _OrganizationStructureFormPageState
                     .toList()
               : [];
 
-          // Evitar ciclo infinito: Un nodo no puede ser su propio padre
           if (widget.existingStructure != null) {
             final myId = widget.existingStructure!['id'];
             _flatStructures.removeWhere((p) => p['id'] == myId);
@@ -95,6 +103,65 @@ class _OrganizationStructureFormPageState
 
     _selectedTypeId = e['organizationTypeId'] ?? e['organization_type_id'];
     _selectedParentId = e['parentId'] ?? e['parent_id'];
+
+    // 🔥 RECUPERAMOS LA URL SI EXISTE
+    _currentPhotoUrl = e['photoUrl'];
+  }
+
+  // 🔥 LÓGICA DE SELECCIÓN Y RECORTE DE IMAGEN
+  Future<void> _pickAndCropImage() async {
+    final colors = Theme.of(context).extension<AppThemeColors>()!;
+    final picker = ImagePicker();
+
+    try {
+      final XFile? pickedFile = await picker.pickImage(
+        source: ImageSource.gallery,
+      );
+
+      if (pickedFile != null) {
+        final CroppedFile? croppedFile = await ImageCropper().cropImage(
+          sourcePath: pickedFile.path,
+          compressQuality: 70, // Calidad del 70% para mantenerlo bajo 1MB
+          uiSettings: [
+            AndroidUiSettings(
+              toolbarTitle: 'Encuadrar Logotipo',
+              toolbarColor: colors.cardBackground,
+              toolbarWidgetColor: colors.text,
+              initAspectRatio: CropAspectRatioPreset.square,
+              lockAspectRatio: true, // Obliga a que sea cuadrado 1:1
+              hideBottomControls: true,
+            ),
+            IOSUiSettings(
+              title: 'Encuadrar Logotipo',
+              aspectRatioLockEnabled: true,
+              resetAspectRatioEnabled: false,
+            ),
+          ],
+        );
+
+        if (croppedFile != null) {
+          final file = File(croppedFile.path);
+          final bytes = await file.readAsBytes();
+
+          setState(() {
+            _imageFile = file;
+            _photoBase64 = base64Encode(bytes); // Listo para irse a GitHub
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              "Error al procesar la imagen: $e",
+              style: TextStyle(color: colors.text),
+            ),
+            backgroundColor: colors.errorColor,
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _save() async {
@@ -107,8 +174,13 @@ class _OrganizationStructureFormPageState
       "name": _nameCtrl.text.trim(),
       "description": _descCtrl.text.trim(),
       "organizationTypeId": _selectedTypeId,
-      "parentId": _selectedParentId, // Null = Raíz
+      "parentId": _selectedParentId,
     };
+
+    // 🔥 INYECTAMOS EL BASE64 SI EL USUARIO SELECCIONÓ UNA FOTO NUEVA
+    if (_photoBase64 != null) {
+      payload['photoBase64'] = _photoBase64;
+    }
 
     try {
       if (widget.existingStructure == null) {
@@ -168,6 +240,79 @@ class _OrganizationStructureFormPageState
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // 🔥 SECCIÓN DE FOTO O LOGO
+                    Center(
+                      child: Stack(
+                        children: [
+                          GestureDetector(
+                            onTap: _pickAndCropImage,
+                            child: Container(
+                              width: 120,
+                              height: 120,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: colors.iconBackground.withValues(
+                                  alpha: 0.1,
+                                ),
+                                border: Border.all(
+                                  color: colors.iconBorder,
+                                  width: 2,
+                                ),
+                                image: _imageFile != null
+                                    ? DecorationImage(
+                                        image: FileImage(_imageFile!),
+                                        fit: BoxFit.cover,
+                                      )
+                                    : (_currentPhotoUrl != null &&
+                                          _currentPhotoUrl!.isNotEmpty)
+                                    ? DecorationImage(
+                                        image: NetworkImage(_currentPhotoUrl!),
+                                        fit: BoxFit.cover,
+                                      )
+                                    : null,
+                              ),
+                              child:
+                                  (_imageFile == null &&
+                                      (_currentPhotoUrl == null ||
+                                          _currentPhotoUrl!.isEmpty))
+                                  ? Icon(
+                                      Icons.business,
+                                      size: 60,
+                                      color: colors.iconBackground.withValues(
+                                        alpha: 0.5,
+                                      ),
+                                    )
+                                  : null,
+                            ),
+                          ),
+                          Positioned(
+                            bottom: 0,
+                            right: 0,
+                            child: GestureDetector(
+                              onTap: _pickAndCropImage,
+                              child: Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: colors.iconBackground,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: colors.cardBackground,
+                                    width: 2,
+                                  ),
+                                ),
+                                child: Icon(
+                                  Icons.camera_alt,
+                                  size: 18,
+                                  color: colors.iconColor,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 30),
+
                     Container(
                       padding: const EdgeInsets.all(15),
                       decoration: BoxDecoration(
@@ -227,7 +372,6 @@ class _OrganizationStructureFormPageState
                       validator: (v) => v == null ? "Requerido" : null,
                     ),
 
-                    // REEMPLAZA EL AppDropdown DE "Pertenece a (Padre)" CON ESTO:
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [

@@ -239,8 +239,12 @@ class _RegistryFormState extends State<RegistryFormPage> {
                 children: fields.map((fieldConfig) {
                   return DynamicFieldWidget(
                     fieldConfig: fieldConfig,
+                    currentFormData: _formData, // 🔥 PASAMOS LA DATA COMPLETA
                     onValueChanged: (key, value) {
-                      _formData[key] = value;
+                      setState(() {
+                        // 🔥 FORZAMOS ACTUALIZACIÓN PARA QUE LAS FÓRMULAS REACCIONEN
+                        _formData[key] = value;
+                      });
                     },
                   );
                 }).toList(),

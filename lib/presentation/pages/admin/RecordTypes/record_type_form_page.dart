@@ -42,6 +42,7 @@ class _RecordTypeFormPageState extends State<RecordTypeFormPage> {
     'DATE',
     'IMAGE_GALLERY',
     'MEMBER_SELECTION',
+    'FORMULA',
   ];
 
   int _tempIdCounter = 0;
@@ -666,6 +667,173 @@ class _RecordTypeFormPageState extends State<RecordTypeFormPage> {
                                     prefixIcon: Icons.filter_list,
                                     onChanged: (v) =>
                                         field['memberSelectionLogic'] = v,
+                                  ),
+                                // --- MOTOR VISUAL DE FÓRMULAS ---
+                                if (field['dataType'] == 'FORMULA')
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 16.0),
+                                    child: Container(
+                                      padding: const EdgeInsets.all(12),
+                                      decoration: BoxDecoration(
+                                        color: colors.iconBackground.withValues(
+                                          alpha: 0.05,
+                                        ),
+                                        border: Border.all(
+                                          color: colors.iconBackground
+                                              .withValues(alpha: 0.3),
+                                        ),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            "Ecuación Matemática:",
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              color: colors.text,
+                                              fontSize: 13,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 8),
+                                          Container(
+                                            width: double.infinity,
+                                            padding: const EdgeInsets.all(12),
+                                            decoration: BoxDecoration(
+                                              color: colors.cardBackground,
+                                              borderRadius:
+                                                  BorderRadius.circular(6),
+                                              border: Border.all(
+                                                color: colors.cardBorder,
+                                              ),
+                                            ),
+                                            child: Text(
+                                              (field['formulaExpression'] ==
+                                                          null ||
+                                                      field['formulaExpression']
+                                                          .toString()
+                                                          .isEmpty)
+                                                  ? "Toca las variables y operadores para armar la fórmula..."
+                                                  : field['formulaExpression']
+                                                        .toString(),
+                                              style: TextStyle(
+                                                color: colors.iconBackground,
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 16,
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(height: 12),
+                                          Wrap(
+                                            spacing: 6,
+                                            runSpacing: 6,
+                                            children: [
+                                              ...[
+                                                '+',
+                                                '-',
+                                                '*',
+                                                '/',
+                                                '(',
+                                                ')',
+                                              ].map(
+                                                (op) => ActionChip(
+                                                  label: Text(
+                                                    op,
+                                                    style: const TextStyle(
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                    ),
+                                                  ),
+                                                  backgroundColor:
+                                                      colors.inputBackground,
+                                                  onPressed: () {
+                                                    setState(
+                                                      () => field['formulaExpression'] =
+                                                          "${field['formulaExpression'] ?? ''} $op"
+                                                              .trim(),
+                                                    );
+                                                  },
+                                                ),
+                                              ),
+                                              ActionChip(
+                                                label: const Icon(
+                                                  Icons.backspace,
+                                                  size: 14,
+                                                ),
+                                                backgroundColor: colors
+                                                    .errorColor
+                                                    .withValues(alpha: 0.2),
+                                                onPressed: () {
+                                                  String current =
+                                                      (field['formulaExpression'] ??
+                                                              '')
+                                                          .toString();
+                                                  if (current.isNotEmpty) {
+                                                    List<String> parts = current
+                                                        .split(' ');
+                                                    parts.removeLast();
+                                                    setState(
+                                                      () =>
+                                                          field['formulaExpression'] =
+                                                              parts.join(' '),
+                                                    );
+                                                  }
+                                                },
+                                              ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 12),
+                                          Text(
+                                            "Variables Disponibles (Solo números):",
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: colors.text.withValues(
+                                                alpha: 0.6,
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(height: 6),
+                                          Wrap(
+                                            spacing: 6,
+                                            runSpacing: 6,
+                                            children: _fields
+                                                .where(
+                                                  (f) =>
+                                                      f['dataType'] == 'INT' ||
+                                                      f['dataType'] ==
+                                                          'DECIMAL',
+                                                )
+                                                .map((f) {
+                                                  return ActionChip(
+                                                    label: Text(
+                                                      f['name'] ?? 'sin_nombre',
+                                                      style: const TextStyle(
+                                                        fontSize: 11,
+                                                      ),
+                                                    ),
+                                                    backgroundColor: colors
+                                                        .iconBackground
+                                                        .withValues(alpha: 0.2),
+                                                    onPressed: () {
+                                                      if (f['name'] != null &&
+                                                          f['name']
+                                                              .toString()
+                                                              .isNotEmpty) {
+                                                        setState(
+                                                          () => field['formulaExpression'] =
+                                                              "${field['formulaExpression'] ?? ''} [${f['name']}]"
+                                                                  .trim(),
+                                                        );
+                                                      }
+                                                    },
+                                                  );
+                                                })
+                                                .toList(),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
                                   ),
                               ],
                             ),

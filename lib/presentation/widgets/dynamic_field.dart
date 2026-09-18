@@ -4,14 +4,17 @@ import 'package:intl/intl.dart';
 import '../../data/repositories/generic_repository.dart';
 import '../../core/constants/api_constants.dart';
 import '../../core/app_theme_colors.dart'; // <--- LA MOCHILA
+import 'package:math_expressions/math_expressions.dart';
 
 class DynamicFieldWidget extends StatefulWidget {
   final Map<String, dynamic> fieldConfig;
+  final Map<String, dynamic> currentFormData;
   final Function(String, dynamic) onValueChanged;
 
   const DynamicFieldWidget({
     super.key,
     required this.fieldConfig,
+    required this.currentFormData,
     required this.onValueChanged,
   });
 
@@ -49,6 +52,68 @@ class _DynamicFieldWidgetState extends State<DynamicFieldWidget> {
   void dispose() {
     _controller.dispose();
     super.dispose();
+  }
+
+  // 🔥 ESCUCHAMOS LOS CAMBIOS EXTERNOS PARA RECALCULAR FÓRMULAS
+  @override
+  void didUpdateWidget(covariant DynamicFieldWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final String dataType = (widget.fieldConfig['dataType'] ?? 'TEXT')
+        .toString()
+        .toUpperCase();
+
+    if (dataType == 'FORMULA') {
+      _evaluateFormula();
+    }
+  }
+
+  void _evaluateFormula() {
+    final String formula = widget.fieldConfig['formulaExpression'] ?? '';
+    final String key = widget.fieldConfig['name'];
+    if (formula.isEmpty) return;
+
+    String expressionString = formula;
+
+    // 1. Reemplazamos las variables [campo] por su valor real actual
+    widget.currentFormData.forEach((k, v) {
+      if (v is num) {
+        expressionString = expressionString.replaceAll('[$k]', v.toString());
+      }
+    });
+
+    // 2. Limpiamos cualquier llave vacía remanente (si aún no han llenado el campo, vale 0)
+    expressionString = expressionString.replaceAll(RegExp(r'\[.*?\]'), '0');
+
+    try {
+      // 3. Evaluamos matemáticamente
+      Parser p = Parser();
+      Expression exp = p.parse(expressionString);
+      ContextModel cm = ContextModel();
+      double eval = exp.evaluate(EvaluationType.REAL, cm);
+
+      // 4. Si cambió, actualizamos la UI y disparamos el guardado al JSON
+      String formattedResult = eval == eval.truncateToDouble()
+          ? eval.toInt().toString()
+          : eval.toStringAsFixed(2);
+
+      if (_controller.text != formattedResult) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _controller.text = formattedResult;
+          widget.onValueChanged(
+            key,
+            eval == eval.truncateToDouble() ? eval.toInt() : eval,
+          );
+        });
+      }
+    } catch (e) {
+      // Si hay error temporal de sintaxis mientras digitan, mostramos 0
+      if (_controller.text != "0") {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _controller.text = "0";
+          widget.onValueChanged(key, 0);
+        });
+      }
+    }
   }
 
   // --- HELPER DE DISEÑO UNIFICADO ---
@@ -140,6 +205,8 @@ class _DynamicFieldWidgetState extends State<DynamicFieldWidget> {
         );
       case 'TEXT':
       case 'STRING':
+      case 'FORMULA': // 🔥 NUEVO CASO DE RENDERIZADO
+        return _buildFormulaField(label, colors);
       default:
         return _buildTextField(label, keyName, isRequired, colors);
     }
@@ -487,6 +554,31 @@ class _DynamicFieldWidgetState extends State<DynamicFieldWidget> {
                 : null,
           );
         },
+      ),
+    );
+  }
+
+  // 🔥 EL WIDGET VISUAL DE LA FÓRMULA (SOLO LECTURA, RESALTADO)
+  Widget _buildFormulaField(String label, AppThemeColors colors) {
+    // Calculamos el valor inicial al cargar la pantalla
+    if (_controller.text.isEmpty) _evaluateFormula();
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16.0),
+      child: TextFormField(
+        controller: _controller,
+        readOnly: true,
+        style: TextStyle(
+          color: colors.iconBackground,
+          fontWeight: FontWeight.bold,
+          fontSize: 20,
+        ),
+        textAlign: TextAlign.center,
+        decoration: _getSharedDecoration(
+          label + ' (Autocalculado)',
+          Icons.calculate,
+          colors,
+        ).copyWith(fillColor: colors.iconBackground.withValues(alpha: 0.05)),
       ),
     );
   }

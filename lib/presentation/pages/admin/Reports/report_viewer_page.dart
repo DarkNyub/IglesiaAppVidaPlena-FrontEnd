@@ -1,7 +1,12 @@
 import 'dart:convert';
+import 'dart:ui' as ui;
+import 'package:flutter/rendering.dart';
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
+import 'dart:typed_data';
+import 'package:file_saver/file_saver.dart';
+
 import '../../../../data/services/api_service.dart';
 import '../../../../core/constants/api_constants.dart';
 import '../../../widgets/master_layout.dart';
@@ -29,7 +34,9 @@ class _ReportViewerPageState extends State<ReportViewerPage> {
   List<dynamic> _chartData = [];
   List<String> _uniqueMetrics = [];
 
-  // Paleta de colores para las barras (Métricas)
+  // 🔥 Llave global para identificar qué parte de la pantalla vamos a convertir en imagen
+  final GlobalKey _chartKey = GlobalKey();
+
   final List<Color> _barColors = [
     Colors.blueAccent,
     Colors.orangeAccent,
@@ -171,6 +178,64 @@ class _ReportViewerPageState extends State<ReportViewerPage> {
     }
   }
 
+  // 🔥 EXPORTADOR DE IMAGEN (PNG) DE ALTA RESOLUCIÓN
+  Future<void> _exportChartToPNG() async {
+    final colors = Theme.of(context).extension<AppThemeColors>()!;
+    if (_chartData.isEmpty) return;
+
+    try {
+      // 1. Buscamos el contenedor visual exacto a través de su Key
+      RenderRepaintBoundary boundary =
+          _chartKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
+
+      // 2. Convertimos el widget en una imagen (pixelRatio 3.0 para que no se pixele al imprimir o hacer zoom)
+      ui.Image image = await boundary.toImage(pixelRatio: 3.0);
+
+      // 3. Pasamos la imagen a bytes en formato PNG
+      ByteData? byteData = await image.toByteData(
+        format: ui.ImageByteFormat.png,
+      );
+
+      if (byteData != null) {
+        Uint8List pngBytes = byteData.buffer.asUint8List();
+        String fileName =
+            "Grafica_${widget.reportData['name']}_${DateFormat('yyyyMMdd').format(DateTime.now())}";
+
+        // 4. Lanzamos la ventana nativa para descargar
+        await FileSaver.instance.saveAs(
+          name: fileName,
+          bytes: pngBytes,
+          fileExtension: "png",
+          mimeType: MimeType.png,
+        );
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                "¡Gráfica exportada exitosamente!",
+                style: TextStyle(color: colors.text),
+              ),
+              backgroundColor: colors.successColor,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              "Error exportando gráfica: $e",
+              style: TextStyle(color: colors.text),
+            ),
+            backgroundColor: colors.errorColor,
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AppThemeColors>()!;
@@ -183,7 +248,7 @@ class _ReportViewerPageState extends State<ReportViewerPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // FILTROS
+            // PANÉL DE FILTROS Y BOTONES
             Card(
               color: colors.cardBackground,
               shape: RoundedRectangleBorder(
@@ -246,17 +311,34 @@ class _ReportViewerPageState extends State<ReportViewerPage> {
                       ],
                     ),
                     const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: _isLoading ? null : _fetchChartData,
-                        icon: const Icon(Icons.show_chart, size: 18),
-                        label: const Text("VER TENDENCIA SEMANAL"),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: colors.buttonBackground,
-                          foregroundColor: colors.buttonText,
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: _isLoading ? null : _fetchChartData,
+                            icon: const Icon(Icons.show_chart, size: 18),
+                            label: const Text("VER TENDENCIA"),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: colors.buttonBackground,
+                              foregroundColor: colors.buttonText,
+                            ),
+                          ),
                         ),
-                      ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: (_isLoading || _chartData.isEmpty)
+                                ? null
+                                : _exportChartToPNG,
+                            icon: const Icon(Icons.image, size: 18),
+                            label: const Text("DESCARGAR IMAGEN"),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: colors.successColor,
+                              foregroundColor: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -264,7 +346,7 @@ class _ReportViewerPageState extends State<ReportViewerPage> {
             ),
             const SizedBox(height: 20),
 
-            // LEYENDA Y GRÁFICO
+            // LIENZO EXPORTABLE (REPAINT BOUNDARY)
             Expanded(
               child: _isLoading
                   ? Center(
@@ -292,36 +374,77 @@ class _ReportViewerPageState extends State<ReportViewerPage> {
                         ],
                       ),
                     )
-                  : Column(
-                      children: [
-                        // LEYENDA DINÁMICA
-                        Wrap(
-                          spacing: 12,
-                          runSpacing: 8,
-                          alignment: WrapAlignment.center,
-                          children: _uniqueMetrics.asMap().entries.map((entry) {
-                            final color =
-                                _barColors[entry.key % _barColors.length];
-                            return Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Container(width: 12, height: 12, color: color),
-                                const SizedBox(width: 4),
-                                Text(
-                                  entry.value,
-                                  style: TextStyle(
-                                    color: colors.text,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                  : SingleChildScrollView(
+                      child: RepaintBoundary(
+                        key:
+                            _chartKey, // 🔥 Atamos la captura de imagen a este contenedor
+                        child: Container(
+                          width: double.infinity,
+                          color: colors
+                              .background, // Fondo sólido obligatorio para que la imagen PNG no salga transparente
+                          padding: const EdgeInsets.all(16.0),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              // Título dentro de la imagen
+                              Text(
+                                (widget.reportData['name'] ?? 'Reporte')
+                                    .toString()
+                                    .toUpperCase(),
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: colors.text,
                                 ),
-                              ],
-                            );
-                          }).toList(),
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 16),
+
+                              // LEYENDA DINÁMICA
+                              Wrap(
+                                spacing: 12,
+                                runSpacing: 8,
+                                alignment: WrapAlignment.center,
+                                children: _uniqueMetrics.asMap().entries.map((
+                                  entry,
+                                ) {
+                                  final color =
+                                      _barColors[entry.key % _barColors.length];
+                                  return Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Container(
+                                        width: 12,
+                                        height: 12,
+                                        color: color,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        entry.value,
+                                        style: TextStyle(
+                                          color: colors.text,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ],
+                                  );
+                                }).toList(),
+                              ),
+                              const SizedBox(
+                                height: 40,
+                              ), // Espacio extra para que los tooltips floten tranquilos
+                              // GRÁFICO
+                              SizedBox(
+                                height:
+                                    350, // Altura fija necesaria para el RepaintBoundary
+                                child: _buildGroupedBarChart(colors),
+                              ),
+                            ],
+                          ),
                         ),
-                        const SizedBox(height: 30),
-                        Expanded(child: _buildGroupedBarChart(colors)),
-                      ],
+                      ),
                     ),
             ),
           ],
@@ -331,7 +454,6 @@ class _ReportViewerPageState extends State<ReportViewerPage> {
   }
 
   Widget _buildGroupedBarChart(AppThemeColors colors) {
-    // Calculamos el valor máximo del eje Y para escalar correctamente
     double maxY = 0;
     for (var group in _chartData) {
       final Map<String, dynamic> metrics = group['metrics'] ?? {};
@@ -340,15 +462,35 @@ class _ReportViewerPageState extends State<ReportViewerPage> {
         if (dVal > maxY) maxY = dVal;
       }
     }
-    // Damos un 20% de aire arriba para que las barras no toquen el techo
-    maxY = maxY + (maxY * 0.2);
+    // 🔥 Damos un 30% de aire arriba para que quepan los números sin cortarse
+    maxY = maxY + (maxY * 0.3);
     if (maxY == 0) maxY = 10;
 
     return BarChart(
       BarChartData(
         maxY: maxY,
+        // 🔥 FORZAR LOS NÚMEROS ARRIBA DE LAS BARRAS (SIEMPRE VISIBLES)
+        barTouchData: BarTouchData(
+          enabled: false,
+          touchTooltipData: BarTouchTooltipData(
+            tooltipPadding: EdgeInsets.zero,
+            tooltipMargin: 4,
+            getTooltipColor: (_) => Colors.transparent, // Sin fondo oscuro
+            getTooltipItem: (group, groupIndex, rod, rodIndex) {
+              return BarTooltipItem(
+                NumberFormat.compact().format(
+                  rod.toY,
+                ), // Número formateado (ej. 1.5K)
+                TextStyle(
+                  color: colors.text,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 10,
+                ),
+              );
+            },
+          ),
+        ),
         titlesData: FlTitlesData(
-          // EJE X (Las Semanas)
           bottomTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
@@ -356,7 +498,6 @@ class _ReportViewerPageState extends State<ReportViewerPage> {
               getTitlesWidget: (val, meta) {
                 final index = val.toInt();
                 if (index >= 0 && index < _chartData.length) {
-                  // El label viene con un salto de línea desde el backend (ej. 05/01\n11/01)
                   String label = _chartData[index]['groupName'] ?? '';
                   return Padding(
                     padding: const EdgeInsets.only(top: 8),
@@ -375,13 +516,12 @@ class _ReportViewerPageState extends State<ReportViewerPage> {
               },
             ),
           ),
-          // EJE Y (Las Cantidades)
           leftTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
               reservedSize: 45,
               getTitlesWidget: (v, m) => Text(
-                NumberFormat.compact().format(v), // Formatea ej: 1500 -> 1.5K
+                NumberFormat.compact().format(v),
                 style: TextStyle(
                   color: colors.text.withValues(alpha: 0.6),
                   fontSize: 10,
@@ -425,7 +565,16 @@ class _ReportViewerPageState extends State<ReportViewerPage> {
             );
           }
 
-          return BarChartGroupData(x: groupIndex, barsSpace: 4, barRods: rods);
+          return BarChartGroupData(
+            x: groupIndex,
+            barsSpace: 4,
+            barRods: rods,
+            // 🔥 Le decimos que dibuje los números flotantes en TODAS las barras de este grupo
+            showingTooltipIndicators: List.generate(
+              rods.length,
+              (index) => index,
+            ),
+          );
         }).toList(),
       ),
     );

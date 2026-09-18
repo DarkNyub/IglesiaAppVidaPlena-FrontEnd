@@ -15,7 +15,7 @@ if (keystorePropertiesFile.exists()) {
 }
 
 android {
-    namespace = "com.example.iglesia_app"
+    namespace = "com.iglesia.gestorvp"
     compileSdk = 37
     //flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion

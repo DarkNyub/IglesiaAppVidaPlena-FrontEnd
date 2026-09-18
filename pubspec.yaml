@@ -1,5 +1,5 @@
-name: iglesia_app
-description: "A new Flutter project."
+name: Gestor_Vida_Plena
+description: "Un Proyecto desarrollado por la Iglesia Vida Plena para la gestión de sus actividades y miembros."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: "none" # Remove this line if you wish to publish to pub.dev
@@ -38,7 +38,7 @@ dependencies:
   flutter_secure_storage: ^11.0.0
   intl: ^0.20.3
   fl_chart: ^1.1.1
-  image_picker: ^1.2.1
+  image_picker: ^1.2.3
   provider: ^6.1.5+1
   shared_preferences: ^2.5.4
   csv: ^8.0.0 # Add this line
@@ -46,6 +46,8 @@ dependencies:
   flutter_launcher_icons: ^0.14.4
   file_picker: ^12.1.3
   excel: ^4.0.6
+  math_expressions: ^3.2.0
+  image_cropper: ^12.2.1
 
 dev_dependencies:
   flutter_test:
@@ -103,5 +105,5 @@ flutter:
 flutter_launcher_icons:
   android: "launcher_icon"
   ios: true
-  image_path: "assets/icons/icon_app.png"
+  image_path: "assets/icons/logo.png"
   min_sdk_android: 21
